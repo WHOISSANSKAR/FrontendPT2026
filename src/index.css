@@ -1,0 +1,474 @@
+@import "tailwindcss";
+
+@layer base {
+  html, body {
+    min-height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #F4F6F9;
+    color: #1e293b;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  #root {
+    min-height: 100vh;
+    min-height: 100dvh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+}
+
+.font-open-sans {
+  font-family: 'Open Sans', sans-serif;
+}
+
+/* Global thin modern scrollbars matching PseudoTeam light-blue theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(147, 197, 253, 0.55) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(147, 197, 253, 0.55);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Hide scrollbars completely for small horizontal selectors, tabs, milestone selectors, navigation strips, and compact containers */
+/* Scrolling still 100% functions via mouse wheel, trackpad, touch swipe, and horizontal drag */
+.no-scrollbar,
+.scrollbar-none,
+#recent-projects-scroll-container,
+#project-selector-scroll-container,
+#location-selector-scroll-container,
+#milestone-selector-scroll-container {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar,
+#recent-projects-scroll-container::-webkit-scrollbar,
+#project-selector-scroll-container::-webkit-scrollbar,
+#location-selector-scroll-container::-webkit-scrollbar,
+#milestone-selector-scroll-container::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+/* Explicit class for thin modern light-blue scrollbars */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(147, 197, 253, 0.55) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(147, 197, 253, 0.55);
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+/* Upload Project Button Arrow Animation (350ms polished ease-in-out LEFT -> RIGHT -> RETURN) */
+@keyframes upload-arrow-glide {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.upload-btn-arrow-icon {
+  display: inline-flex;
+  transition: transform 150ms ease-out;
+}
+
+#kpi-upload-project-btn:hover .upload-btn-arrow-icon {
+  animation: upload-arrow-glide 350ms ease-in-out;
+}
+
+#kpi-upload-project-btn:active .upload-btn-arrow-icon {
+  transform: translateX(4px);
+}
+
+/* 3D Ecosystem Background Animations - Pure Geometric & Abstract */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(1deg);
+  }
+}
+
+@keyframes float-medium {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-16px) rotate(-1.5deg);
+  }
+}
+
+@keyframes float-delayed {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(14px) rotate(1.2deg);
+  }
+}
+
+@keyframes float-subtle {
+  0%, 100% {
+    transform: translateY(0px) rotateX(0deg) rotateY(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotateX(4deg) rotateY(-4deg);
+  }
+}
+
+@keyframes orbit-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbit-spin-reverse {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes spin-3d-slow {
+  0% {
+    transform: rotateX(15deg) rotateY(0deg) rotateZ(0deg);
+  }
+  50% {
+    transform: rotateX(25deg) rotateY(180deg) rotateZ(10deg);
+  }
+  100% {
+    transform: rotateX(15deg) rotateY(360deg) rotateZ(0deg);
+  }
+}
+
+@keyframes dash-flow {
+  0% {
+    stroke-dashoffset: 80;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes dash-flow-slow {
+  0% {
+    stroke-dashoffset: 120;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes light-wave {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scaleY(1) translateY(0);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scaleY(1.08) translateY(-8px);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 8s ease-in-out infinite;
+}
+
+.animate-float-medium {
+  animation: float-medium 6.5s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 9s ease-in-out infinite 2s;
+}
+
+.animate-float-subtle {
+  animation: float-subtle 10s ease-in-out infinite 1s;
+}
+
+.animate-orbit-spin {
+  animation: orbit-spin 28s linear infinite;
+}
+
+.animate-orbit-spin-reverse {
+  animation: orbit-spin-reverse 34s linear infinite;
+}
+
+.animate-spin-3d-slow {
+  animation: spin-3d-slow 20s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+.animate-dash-flow {
+  stroke-dasharray: 6 8;
+  animation: dash-flow 3s linear infinite;
+}
+
+.animate-dash-flow-slow {
+  stroke-dasharray: 10 12;
+  animation: dash-flow-slow 6s linear infinite;
+}
+
+@keyframes slow-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0) rotate(1.5deg);
+  }
+}
+
+@keyframes slow-drift-alt {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, 16px, 0) rotate(-1.5deg);
+  }
+}
+
+@keyframes slow-ring-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slow-ring-spin-reverse {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes slow-light-breathe {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.1);
+  }
+}
+
+.animate-slow-drift {
+  animation: slow-drift 16s ease-in-out infinite;
+}
+
+.animate-slow-drift-alt {
+  animation: slow-drift-alt 20s ease-in-out infinite 2s;
+}
+
+.animate-slow-ring-spin {
+  animation: slow-ring-spin 60s linear infinite;
+}
+
+.animate-slow-ring-spin-reverse {
+  animation: slow-ring-spin-reverse 75s linear infinite;
+}
+
+.animate-slow-light-breathe {
+  animation: slow-light-breathe 14s ease-in-out infinite;
+}
+
+@keyframes glitter-sweep {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(250%);
+    opacity: 0.2;
+  }
+}
+
+.animate-glitter-sweep {
+  animation: glitter-sweep 1.1s linear infinite;
+}
+
+@keyframes sparkle-pulse {
+  0%, 100% {
+    transform: scale(0.8) rotate(0deg);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.3) rotate(90deg);
+    opacity: 1;
+  }
+}
+
+.animate-sparkle-pulse {
+  animation: sparkle-pulse 800ms ease-in-out infinite;
+}
+
+
+
+/* ================================================================== */
+/* changes done by vb: AUTH SCREENS (login / sign-up / loader)         */
+/* Fonts, animated background and entrance animations.                */
+/* ================================================================== */
+.auth-font {
+  font-family: 'DM Sans', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+.auth-display {
+  font-family: 'Sora', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  letter-spacing: -0.025em;
+}
+
+/* Drifting aurora blobs */
+@keyframes auth-blob-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(12vw, 8vh, 0) scale(1.15); }
+  66%      { transform: translate3d(-6vw, 14vh, 0) scale(0.92); }
+}
+@keyframes auth-blob-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  40%      { transform: translate3d(-14vw, -10vh, 0) scale(1.2); }
+  75%      { transform: translate3d(6vw, -4vh, 0) scale(0.9); }
+}
+@keyframes auth-blob-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(8vw, -12vh, 0) scale(1.25); }
+}
+.auth-blob-a { animation: auth-blob-a 22s ease-in-out infinite; }
+.auth-blob-b { animation: auth-blob-b 26s ease-in-out infinite; }
+.auth-blob-c { animation: auth-blob-c 19s ease-in-out infinite; }
+
+/* Slowly panning dot grid */
+@keyframes auth-grid-pan {
+  from { background-position: 0 0; }
+  to   { background-position: 56px 56px; }
+}
+.auth-grid-pan { animation: auth-grid-pan 9s linear infinite; }
+
+/* Particles rising and fading */
+@keyframes auth-rise-particle {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  12%  { opacity: 1; }
+  85%  { opacity: 0.9; }
+  100% { transform: translate3d(var(--auth-drift, 20px), -110vh, 0) rotate(180deg); opacity: 0; }
+}
+.auth-particle { animation: auth-rise-particle linear infinite; }
+
+/* Soft diagonal light sweep */
+@keyframes auth-sweep {
+  0%   { transform: translateX(-60%) rotate(12deg); opacity: 0; }
+  20%  { opacity: 0.55; }
+  60%  { opacity: 0; }
+  100% { transform: translateX(160%) rotate(12deg); opacity: 0; }
+}
+.auth-sweep { animation: auth-sweep 9s ease-in-out infinite; }
+
+/* Twinkling nodes for the brand panel */
+@keyframes auth-twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50%      { opacity: 1;    transform: scale(1.25); }
+}
+.auth-twinkle { animation: auth-twinkle 3.2s ease-in-out infinite; }
+
+/* Staggered entrance for form content */
+@keyframes auth-rise {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.auth-rise { animation: auth-rise 560ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Loader: pulsing halo behind the avatar */
+@keyframes auth-halo {
+  0%   { transform: scale(0.85); opacity: 0.55; }
+  100% { transform: scale(1.9);  opacity: 0; }
+}
+.auth-halo { animation: auth-halo 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+
+/* Loader progress bar shimmer */
+@keyframes auth-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(200%); }
+}
+.auth-shimmer { animation: auth-shimmer 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-blob-a, .auth-blob-b, .auth-blob-c, .auth-grid-pan, .auth-particle,
+  .auth-sweep, .auth-twinkle, .auth-rise, .auth-halo, .auth-shimmer {
+    animation: none !important;
+  }
+  .auth-particle, .auth-sweep { display: none; }
+}
