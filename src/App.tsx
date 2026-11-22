@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { getCustomerOrders } from './services/orders.service';
+import { placeCartOrder } from './services/checkout.service'; // changes done by vb
 import { useLocation, useNavigate } from 'react-router-dom';
 
 // changes done by vb: removed the import of ./data/mockData — the app no longer uses mock data.
@@ -1922,11 +1923,19 @@ export const App: React.FC = () => {
 
   // Cart Checkout
 
-  const handleCartCheckout = () => {
+  // changes done by vb
+  const handleCartCheckout = async (addressId: number) => {
 
+    const lines = cart
+      .map(item => ({ hardwareId: Number(item.spareId ?? item.id), quantity: item.quantity }))
+      .filter(line => Number.isFinite(line.hardwareId) && line.quantity > 0);
+
+    const { placed, orders: refreshedOrders } = await placeCartOrder(addressId, lines);
+
+    setOrders(refreshedOrders);
     setCart([]);
 
-    showToast('Enterprise requisition submitted to procurement dispatch.');
+    showToast(`Requisition submitted — ${placed} ${placed === 1 ? 'order' : 'orders'} placed.`);
 
   };
 
@@ -2145,7 +2154,7 @@ export const App: React.FC = () => {
 
       id="pseudoteam-app-root"
 
-      className="w-full h-screen max-h-screen overflow-hidden bg-[#F4F6F9] text-slate-800 flex flex-col font-sans select-none animate-in fade-in duration-700 ease-out"
+      className="w-full h-dvh max-h-dvh overflow-hidden bg-[#F4F6F9] text-slate-800 flex flex-col font-sans select-none animate-in fade-in duration-700 ease-out" /* changes done by vb */
 
     >
 
@@ -2447,7 +2456,7 @@ export const App: React.FC = () => {
 
           id="main-dashboard-viewport"
 
-          className="flex-1 p-2.5 sm:p-3 lg:px-4 lg:py-2.5 flex flex-col gap-2.5 max-w-[1680px] w-full mx-auto overflow-y-auto xl:overflow-hidden min-h-0 xl:h-[calc(100vh-56px)] select-text"
+          className="flex-1 p-2.5 sm:p-3 lg:px-4 lg:py-2.5 flex flex-col gap-2.5 max-w-[1680px] w-full mx-auto overflow-y-auto xl:overflow-hidden min-h-0 xl:h-[calc(100dvh-56px)] select-text" /* changes done by vb */
 
         >
 

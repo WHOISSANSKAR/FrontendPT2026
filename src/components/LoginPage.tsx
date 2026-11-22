@@ -771,7 +771,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               ? 'max-w-[calc(100vw-24px)] sm:max-w-[680px] md:max-w-[740px] p-4 sm:p-7 md:p-9'
               : 'max-w-[calc(100vw-24px)] sm:max-w-[480px] p-4 sm:p-6 md:p-7'
             : 'max-w-[calc(100vw-24px)] sm:max-w-[440px] p-4 sm:p-7 md:p-8'
-          } bg-white border border-[#E2E8F0] rounded-[20px] shadow-[0_12px_40px_rgba(0,0,0,0.06),0_2px_6px_rgba(0,0,0,0.03)] relative z-10 transition-all duration-300 max-h-[92vh] sm:max-h-[95vh] overflow-y-auto no-scrollbar`}
+          } bg-white border border-[#E2E8F0] rounded-[20px] shadow-[0_12px_40px_rgba(0,0,0,0.06),0_2px_6px_rgba(0,0,0,0.03)] relative z-10 transition-all duration-300 max-h-[92dvh] sm:max-h-[95dvh] overflow-y-auto no-scrollbar`} /* changes done by vb */
         style={{
           opacity: phase === 'onboarding-fading-out' ? 0 : 1,
           transform: phase === 'onboarding-fading-out' ? 'scale(0.97)' : 'scale(1)',

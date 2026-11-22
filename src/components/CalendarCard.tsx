@@ -509,7 +509,7 @@ const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
           onClick={() => setIsAddModalOpen(false)}
         >
           <div 
-            className="bg-white rounded-2xl max-w-sm w-full max-h-[92vh] overflow-y-auto no-scrollbar shadow-2xl border border-slate-200 p-4 sm:p-5 space-y-4 animate-in zoom-in-95 duration-150"
+            className="bg-white rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-2xl border border-slate-200 p-4 sm:p-5 space-y-4 animate-in zoom-in-95 duration-150" /* changes done by vb */
             onClick={(e) => e.stopPropagation()}
             id="calendar-add-event-modal"
           >

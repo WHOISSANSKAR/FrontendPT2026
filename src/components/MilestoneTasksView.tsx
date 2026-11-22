@@ -13,8 +13,11 @@ import {
   X,
   Sparkles,
   AlertTriangle,
-  CheckSquare
+  CheckSquare,
+  ChevronDown, // changes done by vb
+  Loader2 // changes done by vb
 } from 'lucide-react';
+import { getTaskActivity } from '../services/taskActivity.service'; // changes done by vb
 import {
   ProjectItem,
   ProjectLocation,
@@ -165,6 +168,36 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     return activeTasks.filter(t => t.status === statusFilter);
   }, [activeTasks, statusFilter]);
 
+  // changes done by vb
+  const [openActivityIds, setOpenActivityIds] = useState<Record<string, boolean>>({});
+  const [taskActivity, setTaskActivity] = useState<
+    Record<string, { loading: boolean; error: string | null; items: MilestoneTaskActivity[] }>
+  >({});
+
+  const toggleTaskActivity = async (task: MilestoneTask) => {
+    const willOpen = !openActivityIds[task.id];
+    setOpenActivityIds(prev => ({ ...prev, [task.id]: willOpen }));
+    if (!willOpen) return;
+
+    setTaskActivity(prev => ({
+      ...prev,
+      [task.id]: { loading: true, error: null, items: prev[task.id]?.items ?? [] },
+    }));
+    try {
+      const items = await getTaskActivity(task.id);
+      setTaskActivity(prev => ({ ...prev, [task.id]: { loading: false, error: null, items } }));
+    } catch (err) {
+      setTaskActivity(prev => ({
+        ...prev,
+        [task.id]: {
+          loading: false,
+          error: err instanceof Error ? err.message : 'Unable to load activity.',
+          items: prev[task.id]?.items ?? [],
+        },
+      }));
+    }
+  };
+
   // Milestone-level notes state (clean, no mock notes)
   const [milestoneNotes, setMilestoneNotes] = useState<
     Record<string, { id: string; user: string; text: string; time: string }[]>
@@ -310,8 +343,18 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
       className="w-full min-h-[calc(100dvh-56px)] flex-1 overflow-y-auto lg:overflow-hidden lg:h-[calc(100dvh-56px)] lg:max-h-[calc(100dvh-56px)] flex flex-col bg-[#F4F6F9] px-3 sm:px-4 lg:px-6 py-2 gap-2 select-none"
     >
       {/* 1. Breadcrumbs + Navigation Bar */}
-      <div className="flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium overflow-hidden text-ellipsis whitespace-nowrap">
+      {/* changes done by vb */}
+      <div className="flex items-center shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 font-medium min-w-0">
+          <button
+            onClick={onBackToMilestones}
+            id="btn-back-to-milestones"
+            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold px-2 py-1 rounded-md hover:bg-blue-50 transition-colors cursor-pointer mr-1"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Milestones</span>
+          </button>
+          <span className="text-slate-300">|</span>
           <button
             onClick={onBackToDashboard}
             className="hover:text-blue-700 transition-colors cursor-pointer font-medium"
@@ -352,17 +395,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             {activeMilestone.name}
           </span>
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={onBackToMilestones}
-            id="btn-back-to-milestones"
-            className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 hover:text-blue-700 text-xs font-semibold rounded-lg border border-slate-200/90 shadow-2xs transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Milestones</span>
-          </button>
-        </div>
       </div>
 
       {/* 2. Top Milestone Selector Bar */}
@@ -382,7 +414,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             onMouseMove={handleMilestoneMouseMove}
             onMouseUp={handleMilestoneMouseUp}
             onMouseLeave={handleMilestoneMouseUp}
-            className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar scrollbar-none flex-nowrap w-full select-none"
+            className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar scrollbar-none flex-nowrap w-full select-none scroll-x-visible" /* changes done by vb */
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
@@ -449,17 +481,18 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
       {/* 3. Milestone Header */}
       <div 
         id="milestone-tasks-header"
-        className="bg-[#F2F7FF] rounded-xl border border-blue-100 px-3.5 py-1.5 flex items-center justify-between shadow-2xs shrink-0"
+        className="bg-[#F2F7FF] rounded-xl border border-blue-100 px-3.5 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 shadow-2xs shrink-0" /* changes done by vb */
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div>
+        {/* changes done by vb */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-slate-900 tracking-tight leading-tight flex items-center gap-2 truncate">
+              <h1 className="text-sm font-bold text-slate-900 tracking-tight leading-tight flex flex-wrap items-center gap-2">
                 <span>{activeMilestone.name} — Task Timeline</span>
                 {renderStatusPill(activeMilestone.status)}
               </h1>
             </div>
-            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-600 font-medium truncate">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-slate-600 font-medium">
               <span className="font-bold text-blue-700 bg-blue-50/80 px-1.5 py-0.2 rounded border border-blue-200/60">
                 {project.name}
               </span>
@@ -479,7 +512,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 ml-auto">
           <div className="text-right">
             <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
               Task Completion
@@ -780,6 +813,65 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                             </span>
                           </div>
                         </div>
+
+                        {/* changes done by vb */}
+                        {(() => {
+                          const isOpen = !!openActivityIds[task.id];
+                          const state = taskActivity[task.id];
+                          const items = state?.items ?? [];
+                          return (
+                            <div className="mt-2 pt-2 border-t border-slate-100">
+                              <button
+                                type="button"
+                                onClick={() => toggleTaskActivity(task)}
+                                aria-expanded={isOpen}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                <span>{isOpen ? 'Hide activity' : 'Show activity'}</span>
+                                {items.length > 0 && (
+                                  <span className="ml-0.5 px-1.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] text-blue-700">
+                                    {items.length}
+                                  </span>
+                                )}
+                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                              </button>
+
+                              {isOpen && (
+                                <div className="mt-2 space-y-2">
+                                  {state?.loading && items.length === 0 ? (
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-500 py-1">
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      Loading activity…
+                                    </div>
+                                  ) : state?.error ? (
+                                    <div className="text-[11px] text-rose-600 py-1">{state.error}</div>
+                                  ) : items.length === 0 ? (
+                                    <div className="text-[11px] text-slate-400 italic py-1">
+                                      No activity yet. Updates from the PseudoTeam team will appear here.
+                                    </div>
+                                  ) : (
+                                    items.map(act => (
+                                      <div key={act.id} className="flex gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+                                        <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                          {(act.user || 'P').charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex flex-wrap items-center gap-x-1.5 text-[10px]">
+                                            <span className="font-bold text-slate-800">{act.user}</span>
+                                            <span className="px-1.5 rounded bg-blue-50 border border-blue-200 text-blue-700 font-semibold">{act.role}</span>
+                                            {act.timestamp && <span className="text-slate-400 font-mono">{act.timestamp}</span>}
+                                          </div>
+                                          <p className="text-[11px] text-slate-700 mt-0.5 leading-relaxed whitespace-pre-line">{act.text}</p>
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

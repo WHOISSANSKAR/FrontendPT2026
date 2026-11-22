@@ -455,7 +455,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
   return (
     <div 
       id="location-milestones-viewport"
-      className="flex-1 min-h-[calc(100vh-56px)] overflow-y-auto flex flex-col bg-[#F4F6F9] px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 gap-2 sm:gap-2.5 select-none"
+      className="flex-1 min-h-[calc(100dvh-56px)] overflow-y-auto flex flex-col bg-[#F4F6F9] px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 gap-2 sm:gap-2.5 select-none" /* changes done by vb */
     >
       {/* 1. Breadcrumbs + Navigation Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
@@ -515,7 +515,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             onMouseMove={handleLocationMouseMove}
             onMouseUp={handleLocationMouseUp}
             onMouseLeave={handleLocationMouseUp}
-            className="flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-none flex-nowrap w-full select-none py-0.5"
+            className="flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-none flex-nowrap w-full select-none py-0.5 scroll-x-visible" /* changes done by vb */
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
@@ -802,23 +802,13 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             })}
           </div>
 
-          <div className="grid grid-cols-4 text-center mt-2.5 text-[10px] text-slate-500 font-medium">
-            <div className="border-r border-slate-100 pr-1 text-left">
-              <span className="font-semibold text-slate-800">0–25%</span>
-              <div className="text-slate-500 text-[10px]">Initiation</div>
-            </div>
-            <div className="border-r border-slate-100 px-1 text-center">
-              <span className="font-semibold text-slate-800">25–50%</span>
-              <div className="text-slate-500 text-[10px]">Planning & Design</div>
-            </div>
-            <div className="border-r border-slate-100 px-1 text-center">
-              <span className="font-semibold text-slate-800">50–75%</span>
-              <div className="text-slate-500 text-[10px]">Implementation</div>
-            </div>
-            <div className="pl-1 text-right">
-              <span className="font-semibold text-slate-800">75–100%</span>
-              <div className="text-slate-500 text-[10px]">Final Delivery</div>
-            </div>
+          {/* changes done by vb */}
+          <div className="flex justify-between mx-0.5 mt-2.5 text-[10px] font-semibold text-slate-800">
+            {[0, 25, 50, 75, 100].map((p) => (
+              <div key={p} className="w-5 flex justify-center">
+                <span className="whitespace-nowrap">{p}%</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -856,7 +846,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto no-scrollbar">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto no-scrollbar scroll-x-visible" /* changes done by vb */>
             {filteredMilestones.length > 0 ? (
               <table className="w-full text-left text-xs border-collapse min-w-[560px]">
                 <thead>

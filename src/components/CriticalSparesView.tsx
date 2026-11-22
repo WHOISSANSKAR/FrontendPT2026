@@ -279,7 +279,7 @@ export const CriticalSparesView: React.FC<CriticalSparesViewProps> = ({
         id="critical-spares-table-card"
         className="bg-white rounded-xl border border-[#E5EAF2] shadow-2xs overflow-hidden flex flex-col flex-1 min-h-0"
       >
-        <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-auto no-scrollbar">
+        <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-auto no-scrollbar scroll-x-visible" /* changes done by vb */>
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead className="sticky top-0 z-10 bg-[#F7F9FC] shadow-[0_1px_0_0_#E5EAF2]">
               <tr className="bg-[#F7F9FC] border-b border-[#E5EAF2]">

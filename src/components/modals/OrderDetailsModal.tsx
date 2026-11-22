@@ -136,15 +136,16 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
               </div>
             </div>
 
-            {order.shippingAddress && (
-              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-white border border-[#E5EAF2]">
-                <MapPin className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-                <div className="flex-1">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Delivery Destination</span>
-                  <span className="text-xs text-slate-700 font-medium">{order.shippingAddress}</span>
-                </div>
+            {/* changes done by vb */}
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-white border border-[#E5EAF2]">
+              <MapPin className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Delivery Location</span>
+                <span className={`text-xs font-medium ${order.shippingAddress ? 'text-slate-700' : 'text-slate-400 italic'}`}>
+                  {order.shippingAddress || 'No delivery address recorded'}
+                </span>
               </div>
-            )}
+            </div>
 
             {order.trackingNumber && (
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-white border border-[#E5EAF2]">

@@ -109,7 +109,7 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 scroll-x-visible" /* changes done by vb */>
             {['All', 'Critical', 'Low Stock', 'Pending'].map((st) => (
               <button
                 key={st}
@@ -128,7 +128,7 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
 
         {/* Spares Table */}
         <div
-          className="flex-1 overflow-y-auto overflow-x-auto no-scrollbar scrollbar-none"
+          className="flex-1 overflow-y-auto overflow-x-auto no-scrollbar scrollbar-none scroll-x-visible" /* changes done by vb */
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           <table className="w-full text-left text-xs border-collapse min-w-[720px]">

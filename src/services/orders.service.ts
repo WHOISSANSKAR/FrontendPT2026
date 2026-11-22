@@ -172,6 +172,8 @@ export const mapOrderRowToOrderItem = (row: OrderPlacedApiRow): MappedOrderItem 
       ? formatDisplayDate(row.ordplcd_delivery_date)
       : undefined,
     address: row.ordplcd_address || undefined,
+    // changes done by vb
+    shippingAddress: row.ordplcd_address || undefined,
     qtyPlaced: Number(row.ordplcd_qty_placed || 0),
     finalQty:
       row.ordplcd_final_qty !== null && row.ordplcd_final_qty !== undefined

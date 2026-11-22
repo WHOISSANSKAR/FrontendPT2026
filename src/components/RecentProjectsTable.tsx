@@ -281,14 +281,10 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
         </button>
       </div>
 
-      {/* 2. Scrollable Table Container - 100% hidden scrollbar across all OS & browsers */}
-      <div 
+      {/* changes done by vb */}
+      <div
         id="recent-projects-scroll-container"
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-auto no-scrollbar scrollbar-none select-text"
-        style={{
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none'
-        }}
+        className="flex-1 min-h-0 max-h-[340px] xl:max-h-none overflow-y-auto overflow-x-auto select-text projects-scroll-visible pr-1"
       >
         {/* Mobile View (< 640px): Cards */}
         <div className="block sm:hidden space-y-2 pb-1">

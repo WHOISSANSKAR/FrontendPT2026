@@ -213,7 +213,8 @@ export const TicketsView: React.FC<TicketsViewProps> = ({
           className="self-start sm:self-auto px-4 py-2 text-xs font-semibold text-white bg-[#2161F5] hover:bg-blue-700 active:bg-blue-800 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>+ Open a Ticket</span>
+          {/* changes done by vb */}
+          <span>Open a Ticket</span>
         </button>
       </div>
 

@@ -19,7 +19,7 @@ export const SupportTicketsCard: React.FC<SupportTicketsCardProps> = ({
   const total = tickets.length;
   const ticketTime = (t: SupportTicketItem) =>
     parseUiDate(t.createdAt || t.createdDate)?.getTime() || Number(t.id) || 0;
-  const recentTickets = [...tickets].sort((a, b) => ticketTime(b) - ticketTime(a)).slice(0, 3);
+  const recentTickets = [...tickets].sort((a, b) => ticketTime(b) - ticketTime(a)).slice(0, 10); // changes done by vb
 
   const shortDate = (t: SupportTicketItem) => {
     const d = parseUiDate(t.createdAt || t.createdDate);
@@ -70,13 +70,14 @@ export const SupportTicketsCard: React.FC<SupportTicketsCardProps> = ({
       </div>
 
       {/* changes done by vb: recent tickets list (replaces the segmented bar + legend) */}
-      <div className="flex-1 min-h-0 overflow-y-auto my-1">
+      {/* changes done by vb */}
+      <div className="flex-1 min-h-0 max-h-[118px] xl:max-h-none overflow-y-auto no-scrollbar my-1">
         <table className="w-full text-left text-xs border-collapse table-fixed">
-          <thead>
+          <thead>{/* changes done by vb */}
             <tr className="text-slate-400 font-normal text-[11px] border-b border-slate-100">
-              <th className="pb-1 font-normal">Ticket</th>
-              <th className="pb-1 font-normal w-24">Status</th>
-              <th className="pb-1 font-normal text-right w-14">Date</th>
+              <th className="pb-1 font-normal sticky top-0 z-10 bg-white shadow-[inset_0_-1px_0_#f1f5f9]">Ticket</th>
+              <th className="pb-1 font-normal sticky top-0 z-10 bg-white shadow-[inset_0_-1px_0_#f1f5f9] w-24">Status</th>
+              <th className="pb-1 font-normal sticky top-0 z-10 bg-white shadow-[inset_0_-1px_0_#f1f5f9] text-right w-14">Date</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">

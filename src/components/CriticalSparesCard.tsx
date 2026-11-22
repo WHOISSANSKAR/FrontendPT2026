@@ -18,7 +18,7 @@ export const CriticalSparesCard: React.FC<CriticalSparesCardProps> = ({
   const total = spares.length;
   const recentSpares = [...spares]
     .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0))
-    .slice(0, 3);
+    .slice(0, 10); // changes done by vb
 
   const statusPill = (status: string) => {
     const s = String(status || '').trim().toLowerCase();
@@ -63,13 +63,14 @@ export const CriticalSparesCard: React.FC<CriticalSparesCardProps> = ({
       </div>
 
       {/* changes done by vb: recent spares list (replaces the segmented bar + legend) */}
-      <div className="flex-1 min-h-0 overflow-y-auto my-1">
+      {/* changes done by vb */}
+      <div className="flex-1 min-h-0 max-h-[118px] xl:max-h-none overflow-y-auto no-scrollbar my-1">
         <table className="w-full text-left text-xs border-collapse table-fixed">
-          <thead>
+          <thead>{/* changes done by vb */}
             <tr className="text-slate-400 font-normal text-[11px] border-b border-slate-100">
-              <th className="pb-1 font-normal">Part</th>
-              <th className="pb-1 font-normal text-center w-10">Qty</th>
-              <th className="pb-1 font-normal text-right w-24">Status</th>
+              <th className="pb-1 font-normal sticky top-0 z-10 bg-white shadow-[inset_0_-1px_0_#f1f5f9]">Part</th>
+              <th className="pb-1 font-normal sticky top-0 z-10 bg-white shadow-[inset_0_-1px_0_#f1f5f9] text-center w-10">Qty</th>
+              <th className="pb-1 font-normal sticky top-0 z-10 bg-white shadow-[inset_0_-1px_0_#f1f5f9] text-right w-24">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">

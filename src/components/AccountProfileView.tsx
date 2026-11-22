@@ -608,7 +608,7 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
           </div>
 
           {/* Mobile Navigation */}
-          <div className="flex md:hidden overflow-x-auto no-scrollbar gap-1 p-1 bg-white border border-slate-200/90 rounded-lg shadow-xs">
+          <div className="flex md:hidden overflow-x-auto no-scrollbar gap-1 p-1 bg-white border border-slate-200/90 rounded-lg shadow-xs scroll-x-visible" /* changes done by vb */>
             {navMenuItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;

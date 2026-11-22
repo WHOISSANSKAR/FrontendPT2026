@@ -252,14 +252,16 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 select-none shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
-      <div className="max-w-[1720px] mx-auto px-3 sm:px-4 lg:px-6 h-[56px] flex items-center justify-between gap-2 sm:gap-4">
+      {/* changes done by vb */}
+      <div className="max-w-[1720px] mx-auto px-2 min-[360px]:px-3 sm:px-4 lg:px-6 h-[56px] flex items-center justify-between gap-1.5 min-[360px]:gap-2 sm:gap-4">
 
         {/* Left: Brand + Subtitle + Mobile Hamburger */}
-        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        {/* changes done by vb */}
+        <div className="flex items-center gap-1 min-[360px]:gap-2 sm:gap-4 min-w-0">
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="lg:hidden p-2 -ml-1 text-slate-700 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer flex items-center justify-center w-10 h-10"
+            className="xl:hidden p-2 -ml-1 text-slate-700 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer flex items-center justify-center w-9 h-9 min-[360px]:w-10 min-[360px]:h-10 shrink-0"
             aria-label={isMobileMenuOpen ? "Close menu" : "Open navigation menu"}
             id="btn-header-mobile-hamburger"
           >
@@ -271,24 +273,25 @@ export const Header: React.FC<HeaderProps> = ({
               handleTabClick('Dashboard');
               setIsMobileMenuOpen(false);
             }}
-            className="flex items-center text-left transition-opacity hover:opacity-90 cursor-pointer py-1"
+            className="flex items-center text-left transition-opacity hover:opacity-90 cursor-pointer py-1 min-w-0"
             id="header-brand-logo"
             aria-label="PseudoTeam Dashboard"
           >
             {/* changes done by vb: new PseudoTeam logo (public/pseudoteam-logo.png) on a dark navy badge
                 so its light text is readable on the white header */}
-            <span className="inline-flex items-center rounded-xl bg-gradient-to-br from-[#0B1736] to-[#1E3A8A] px-2 py-0.5 shadow-[0_4px_12px_rgba(11,23,54,0.25)] ring-1 ring-white/10">
+            <span className="inline-flex items-center min-w-0 rounded-xl bg-gradient-to-br from-[#0B1736] to-[#1E3A8A] px-1.5 min-[360px]:px-2 py-0.5 shadow-[0_4px_12px_rgba(11,23,54,0.25)] ring-1 ring-white/10">
               <img
                 src="/pseudoteam-logo.png"
                 alt="PseudoTeam"
-                className="h-8 sm:h-10 w-auto max-w-[110px] sm:max-w-[140px] object-contain select-none"
+                className="h-7 min-[360px]:h-8 sm:h-10 w-auto max-w-full min-[360px]:max-w-[110px] sm:max-w-[140px] min-w-0 object-contain select-none"
                 referrerPolicy="no-referrer"
               />
             </span>
           </button>
 
           {/* Navigation Items (Desktop & Wide Tablets) */}
-          <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 ml-1 sm:ml-2 overflow-x-auto no-scrollbar">
+          {/* changes done by vb */}
+          <nav className="hidden xl:flex items-center gap-0.5 xl:gap-1 ml-1 sm:ml-2 overflow-x-auto no-scrollbar">
             {navItems.map((tab) => {
               const isCalendarItem = tab === 'Calendar';
               const isActive = isCalendarItem
@@ -317,13 +320,13 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right: Search + Notifications + Cart + User Avatar */}
-        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-0.5 min-[360px]:gap-1.5 sm:gap-3 shrink-0">
 
           {/* Mobile Search Toggle Button */}
           <button
             type="button"
             onClick={() => setIsMobileSearchOpen(!isMobileSearchOpen)}
-            className="md:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer w-10 h-10 flex items-center justify-center"
+            className="md:hidden xl:flex 2xl:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer w-9 h-9 min-[360px]:w-10 min-[360px]:h-10 flex items-center justify-center" /* changes done by vb */
             title="Search"
             aria-label="Search"
           >
@@ -331,7 +334,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Desktop/Tablet Global Search Bar */}
-          <div ref={searchRef} className="relative hidden md:block w-44 lg:w-60 xl:w-72">
+          {/* changes done by vb */}
+          <div ref={searchRef} className="relative hidden md:block xl:hidden 2xl:block w-44 lg:w-60 2xl:w-72">
             <div className="relative flex items-center">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
               <input
@@ -389,12 +393,12 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Action Icons: Notifications & Cart */}
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex items-center gap-0.5 min-[360px]:gap-1 sm:gap-2">
             {/* Notifications Button */}
             <button
               onClick={onOpenNotifications}
               id="header-notifications-button"
-              className="w-10 h-10 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              className="w-9 h-9 min-[360px]:w-10 min-[360px]:h-10 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               title="Notifications"
               aria-label="Notifications"
             >
@@ -412,7 +416,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenCart}
               id="header-cart-button"
-              className="w-10 h-10 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              className="w-9 h-9 min-[360px]:w-10 min-[360px]:h-10 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               title="Requisitions & Cart"
               aria-label="Requisitions & Cart"
             >
@@ -434,7 +438,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               id="header-user-dropdown-button"
-              className="h-10 flex items-center gap-1.5 sm:gap-2 px-1.5 hover:bg-slate-100 rounded-lg transition-colors text-left cursor-pointer"
+              className="h-10 flex items-center gap-1.5 sm:gap-2 px-1 min-[360px]:px-1.5 hover:bg-slate-100 rounded-lg transition-colors text-left cursor-pointer"
               aria-label="User Profile menu"
             >
               <div className="w-7 h-7 rounded-full overflow-hidden border border-slate-200 shrink-0">
@@ -462,7 +466,8 @@ export const Header: React.FC<HeaderProps> = ({
                   {userName || 'Customer'}
                 </div>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+              {/* changes done by vb */}
+              <ChevronDown className="hidden min-[360px]:block w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
             </button>
 
             {/* User Dropdown Menu */}
@@ -524,8 +529,9 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Mobile Search Bar Dropdown */}
+      {/* changes done by vb */}
       {isMobileSearchOpen && (
-        <div className="md:hidden border-t border-slate-200 bg-white px-3 sm:px-4 py-2.5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="md:hidden xl:block 2xl:hidden border-t border-slate-200 bg-white px-3 sm:px-4 py-2.5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-150">
           <div className="relative flex items-center">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
             <input
@@ -573,11 +579,12 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Responsive Mobile Navigation Drawer */}
+      {/* changes done by vb */}
       {isMobileMenuOpen && (
         <div
           ref={mobileMenuRef}
           id="header-mobile-drawer"
-          className="lg:hidden border-t border-slate-200 bg-white/98 backdrop-blur-md shadow-2xl animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-56px)] overflow-y-auto no-scrollbar"
+          className="xl:hidden border-t border-slate-200 bg-white/98 backdrop-blur-md shadow-2xl animate-in slide-in-from-top-2 duration-200 max-h-[calc(100dvh-56px)] overflow-y-auto no-scrollbar"
         >
           <div className="p-3 sm:p-4 space-y-1">
             <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -643,7 +650,7 @@ export const Header: React.FC<HeaderProps> = ({
             top: `${popupPos.top}px`,
             left: `${popupPos.left}px`,
             width: `${popupPos.width}px`,
-            maxHeight: 'calc(100vh - 72px)',
+            maxHeight: 'calc(100dvh - 72px)', // changes done by vb
           }}
           className="z-50 bg-white rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.14),0_4px_12px_rgba(0,0,0,0.06)] border border-slate-200/90 overflow-y-auto no-scrollbar animate-in fade-in slide-in-from-top-2 duration-200"
         >
