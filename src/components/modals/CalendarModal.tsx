@@ -382,16 +382,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ isOpen, onClose, e
           )}
         </div>
 
-        {/* Legend */}
-        <div className="mt-auto rounded-xl border border-slate-200/80 bg-white p-3">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Legend</div>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11.5px] text-slate-600">
-            <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600" /> Today</span>
-            <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-slate-100" /> Past</span>
-            <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-white" /> Upcoming</span>
-            <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-[4px] bg-indigo-50 ring-1 ring-inset ring-indigo-100" /> Weekend</span>
-          </div>
-        </div>
+        {/* changes done by vb */}
       </aside>
     );
   };
