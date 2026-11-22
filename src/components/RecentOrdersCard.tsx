@@ -13,12 +13,9 @@ export const RecentOrdersCard: React.FC<RecentOrdersCardProps> = ({
   onViewAll,
   onSelectOrder
 }) => {
-  const displayOrders = orders && orders.length >= 4 ? orders.slice(0, 4) : [
-    { id: 'ord-1', orderNumber: '#1024', itemsCount: 3, status: 'Processing', date: 'Today' },
-    { id: 'ord-2', orderNumber: '#1023', itemsCount: 5, status: 'Delivered', date: '12 Sep' },
-    { id: 'ord-3', orderNumber: '#1022', itemsCount: 2, status: 'Pending', date: '10 Sep' },
-    { id: 'ord-4', orderNumber: '#1021', itemsCount: 4, status: 'Delivered', date: '08 Sep' }
-  ];
+  // changes done by vb: always show the real orders (up to 4). The old code replaced them with
+  // 4 hard-coded sample orders (#1024…#1021) whenever there were fewer than 4 real ones.
+  const displayOrders = (orders || []).slice(0, 4);
 
   const renderStatusPill = (status: string) => {
     switch (status) {
@@ -101,6 +98,14 @@ export const RecentOrdersCard: React.FC<RecentOrdersCardProps> = ({
                 </td>
               </tr>
             ))}
+            {/* changes done by vb: empty state instead of sample orders */}
+            {displayOrders.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-6 text-center text-[11px] text-slate-400">
+                  No orders yet
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

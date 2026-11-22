@@ -34,13 +34,13 @@ export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({
   const actions = [
     {
       id: 'qa-upload',
-      label: 'Upload...',
+      label: 'Upload Project', // changes done by vb: full name (was 'Upload...')
       icon: FolderPlus,
       action: onUploadProject
     },
     {
       id: 'qa-generate',
-      label: 'Generate...',
+      label: 'Generate Report', // changes done by vb: full name (was 'Generate...')
       icon: FileText,
       action: onGenerateReport
     },
@@ -103,10 +103,13 @@ export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({
               key={act.id}
               onClick={act.action}
               id={`quick-action-btn-${act.id}`}
-              className="flex flex-col items-center justify-center p-2 rounded-lg bg-[#F0F6FF] hover:bg-[#E0EEFE] active:scale-95 transition-all text-center cursor-pointer group h-[50px]"
+              // changes done by vb: min-height instead of fixed height so a 2-line name fits
+              className="flex flex-col items-center justify-center px-1 py-1.5 rounded-lg bg-[#F0F6FF] hover:bg-[#E0EEFE] active:scale-95 transition-all text-center cursor-pointer group min-h-[50px]"
+              title={act.label}
             >
-              <Icon className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform stroke-[2]" />
-              <span className="text-[10.5px] font-medium text-slate-800 leading-tight mt-1 truncate max-w-full">
+              <Icon className="w-4 h-4 shrink-0 text-blue-600 group-hover:scale-110 transition-transform stroke-[2]" />
+              {/* changes done by vb: full name wraps onto 2 lines instead of being cut with "..." */}
+              <span className="text-[10.5px] font-medium text-slate-800 leading-[1.15] mt-1 max-w-full break-words">
                 {act.label}
               </span>
             </button>

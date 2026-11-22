@@ -21,6 +21,11 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
   activeFilterLabel,
   onClearFilter
 }) => {
+  // changes done by vb: empty-state text — names the active filter, or a plain "No projects found."
+  const emptyMessage = activeFilterLabel
+    ? `No “${activeFilterLabel}” projects found.`
+    : 'No projects found.';
+
   // changes done by vb: customer column shows only the first name (full name on hover)
   const firstName = (full: string) => (full || '').trim().split(/\s+/)[0] || '—';
 
@@ -353,17 +358,9 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
               );
             })
           ) : (
+            // changes done by vb: no "Reset Filter" link; message depends on whether a filter is active
             <div className="py-8 text-center text-slate-400">
-              <p className="text-xs font-medium text-slate-500">No projects match the selected filter.</p>
-              {onClearFilter && (
-                <button
-                  type="button"
-                  onClick={onClearFilter}
-                  className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer mt-1"
-                >
-                  Reset Filter
-                </button>
-              )}
+              <p className="text-xs font-medium text-slate-500">{emptyMessage}</p>
             </div>
           )}
         </div>
@@ -469,17 +466,9 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
             ) : (
               <tr>
                 <td colSpan={6} className="py-10 text-center text-slate-400">
+                  {/* changes done by vb: no "Reset Filter" link; message depends on whether a filter is active */}
                   <div className="flex flex-col items-center justify-center gap-1.5">
-                    <p className="text-xs font-medium text-slate-500">No projects match the selected filter.</p>
-                    {onClearFilter && (
-                      <button
-                        type="button"
-                        onClick={onClearFilter}
-                        className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer"
-                      >
-                        Reset Filter
-                      </button>
-                    )}
+                    <p className="text-xs font-medium text-slate-500">{emptyMessage}</p>
                   </div>
                 </td>
               </tr>

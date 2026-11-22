@@ -187,6 +187,66 @@ export const mapOrderRowToOrderItem = (row: OrderPlacedApiRow): MappedOrderItem 
   };
 };
 
+// changes done by vb: the orders endpoint that is live in the backend (app/services/order_service.py)
+// returns camelCase fields (orderNumber, status, date, amount, ...), while this service was written for
+// raw orders_placed columns (ordplcd_order_no, ...) from the unfinished customer_orders.py. That mismatch
+// showed "#undefined" on screen. This converter renames camelCase rows to the raw column names BEFORE the
+// existing mapOrderRowToOrderItem runs. Rows that already use raw column names pass through untouched,
+// so the existing mapping is unchanged and keeps working once customer_orders.py is finished.
+type CamelCaseOrderRow = {
+  id?: number | string;
+  orderNumber?: string;
+  vendor?: string | null;
+  itemsCount?: number;
+  itemDescription?: string | null;
+  status?: string;
+  date?: string | null;
+  hardwareId?: string | number | null;
+  quantityPlaced?: number;
+  finalQuantity?: number | null;
+  amount?: number | string;
+  finalAmount?: number | string | null;
+  address?: string | null;
+  deliveryDate?: string | null;
+  supplierId?: string | null;
+  supplierEmail?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+const toRawOrderRow = (row: OrderPlacedApiRow | CamelCaseOrderRow): OrderPlacedApiRow => {
+  // Already in raw column format → leave exactly as it is.
+  if (row && typeof row === "object" && "ordplcd_order_no" in row) {
+    return row as OrderPlacedApiRow;
+  }
+
+  const c = (row || {}) as CamelCaseOrderRow;
+  // "Supplier" is the backend's placeholder when no supplier is known — treat it as no name.
+  const supplierName =
+    c.vendor && c.vendor !== "Supplier" ? c.vendor : c.supplierEmail || null;
+
+  return {
+    ordplcd_id: c.id ?? "",
+    ordplcd_hw_id: c.hardwareId != null ? String(c.hardwareId) : "",
+    ordplcd_customer_id: "",
+    ordplcd_address: c.address ?? null,
+    ordplcd_qty_placed: Number(c.quantityPlaced ?? 0),
+    ordplcd_no_of_items: Number(c.itemsCount ?? 1),
+    ordplcd_order_no: c.orderNumber ?? "",
+    ordplcd_amt: c.amount ?? 0,
+    ordplcd_status: c.status ?? "",
+    ordplcd_delivery_date: c.deliveryDate ?? null,
+    ordplcd_order_date: c.date ?? "",
+    ordplcd_sp_id: c.supplierId ?? null,
+    ordplcd_final_qty: c.finalQuantity ?? null,
+    ordplcd_final_amount: c.finalAmount ?? null,
+    created_at: c.createdAt ?? null,
+    updated_at: c.updatedAt ?? null,
+    hw_name: c.itemDescription ?? null,
+    sp_name: supplierName,
+  };
+};
+
 export const getCustomerOrders = async (): Promise<MappedOrderItem[]> => {
   const response = await fetch(`${API_BASE_URL}${API_PREFIX}/orders`, {
     method: "GET",
@@ -207,5 +267,6 @@ export const getCustomerOrders = async (): Promise<MappedOrderItem[]> => {
   }
 
   const rows: OrderPlacedApiRow[] = Array.isArray(data?.orders) ? data.orders : [];
-  return rows.map(mapOrderRowToOrderItem);
+  // changes done by vb: normalise each row to raw column names first (see toRawOrderRow above)
+  return rows.map(toRawOrderRow).map(mapOrderRowToOrderItem);
 };

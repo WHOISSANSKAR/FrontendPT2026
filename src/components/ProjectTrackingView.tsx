@@ -9,7 +9,7 @@ import {
   Globe, 
   Eye, 
   FolderOpen,
-  Network
+  ClipboardList // changes done by vb: MOM icon (was Network — MOM is now meeting minutes, not a tree)
 } from 'lucide-react';
 import { ProjectItem, ProjectLocation, ProjectStatus } from '../types';
 import { ProjectMomModal } from './modals/ProjectMomModal';
@@ -255,7 +255,7 @@ export const ProjectTrackingView: React.FC<ProjectTrackingViewProps> = ({
             onClick={() => setIsMomOpen(true)}
             className="text-xs font-medium text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
           >
-            <Network className="w-3.5 h-3.5" />
+            <ClipboardList className="w-3.5 h-3.5" /> {/* changes done by vb */}
             <span>View MOM</span>
           </button>
           <button

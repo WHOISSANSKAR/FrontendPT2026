@@ -2,25 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { getCustomerOrders } from './services/orders.service';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import {
-
-  INITIAL_PROJECTS,
-
-  INITIAL_CRITICAL_SPARES,
-
-  INITIAL_TICKETS,
-
-  INITIAL_ORDERS,
-
-  INITIAL_EVENTS,
-
-  INITIAL_CART,
-
-  INITIAL_NOTIFICATIONS,
-
-  ensureLocationData
-
-} from './data/mockData';
+// changes done by vb: removed the import of ./data/mockData — the app no longer uses mock data.
+// Everything comes from the backend/database; screens show empty states until data loads.
 
 import {
 
@@ -197,6 +180,30 @@ const isAuthErrorMessage = (msg?: string | null): boolean => {
   );
 };
 
+// changes done by vb: blank (not mock) project used before real projects load,
+// so screens that expect a selected project render an empty state instead of fake data.
+const EMPTY_PROJECT: ProjectItem = {
+  id: '',
+  code: '',
+  name: '',
+  customer: '',
+  category: '',
+  status: 'Not Started',
+  progress: 0,
+  currentPhase: '',
+  velocity: '',
+  manager: '',
+  startDate: '',
+  expectedCompletion: '',
+  budget: '',
+  lastUpdated: '',
+  milestonesCount: 0,
+  completedMilestones: 0,
+  locationsCount: 0,
+  countriesCount: 0,
+  locations: [],
+};
+
 export const App: React.FC = () => {
 
   const location = useLocation();
@@ -254,11 +261,14 @@ export const App: React.FC = () => {
 
   // Core Data State
 
-  const [projects, setProjects] = useState<ProjectItem[]>(INITIAL_PROJECTS);
+  // changes done by vb: start empty (was INITIAL_PROJECTS mock data); filled from the dashboard API
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
 
-  const [selectedProject, setSelectedProject] = useState<ProjectItem>(INITIAL_PROJECTS[0]);
+  // changes done by vb: blank placeholder until a real project is loaded (was INITIAL_PROJECTS[0])
+  const [selectedProject, setSelectedProject] = useState<ProjectItem>(EMPTY_PROJECT);
 
-  const [spares, setSpares] = useState<CriticalSpareItem[]>(INITIAL_CRITICAL_SPARES);
+  // changes done by vb: start empty (was INITIAL_CRITICAL_SPARES mock data); filled from the spares API
+  const [spares, setSpares] = useState<CriticalSpareItem[]>([]);
   const [sparesLoading, setSparesLoading] = useState(false);
   const [sparesError, setSparesError] = useState<string | null>(null);
 
@@ -775,10 +785,10 @@ export const App: React.FC = () => {
       setSelectedLocation(targetLoc);
 
       // Use milestones received from FastAPI.
-      // Only use mock fallback if the milestones property is missing.
+      // changes done by vb: no mock fallback any more — missing milestones means an empty list
       const milestones = Array.isArray(targetLoc.milestones)
         ? targetLoc.milestones
-        : ensureLocationData(targetProj, targetLoc).milestones;
+        : [];
 
       // Find the exact milestone. Do not automatically select the first one.
       const targetMilestone = milestones.find(
@@ -2549,6 +2559,8 @@ export const App: React.FC = () => {
 
               <CriticalSparesCard
 
+                spares={spares} // changes done by vb: real data instead of hard-coded numbers
+
                 onViewAll={() => navigate('/critical-spares')}
 
                 onRequestSpare={() => setIsSparesOpen(true)}
@@ -2562,6 +2574,8 @@ export const App: React.FC = () => {
             <div className="h-auto xl:h-full min-h-[175px] xl:min-h-0">
 
               <SupportTicketsCard
+
+                tickets={tickets} // changes done by vb: real data instead of hard-coded numbers
 
                 onViewAll={() => navigate('/tickets')}
 
