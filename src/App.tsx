@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { getCustomerOrders } from './services/orders.service';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -153,6 +153,50 @@ import {
 
 import type { TodoApiItem } from './services/todo.service';
 
+// Session helpers
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+
+const getJwtExpiryMs = (token: string | null): number | null => {
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const payload = JSON.parse(atob(padded));
+    return typeof payload?.exp === 'number' ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+};
+
+const hasValidSessionToken = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const token = localStorage.getItem('auth_token');
+  if (!token) return false;
+  const expMs = getJwtExpiryMs(token);
+  if (expMs !== null && Date.now() >= expMs) {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('pseudoteam_authenticated');
+    return false;
+  }
+  return true;
+};
+
+const isAuthErrorMessage = (msg?: string | null): boolean => {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('not authenticated') ||
+    lower.includes('unauthenticated') ||
+    lower.includes('unauthorized') ||
+    lower.includes('token expired') ||
+    lower.includes('invalid token') ||
+    lower.includes('session expired') ||
+    lower.includes('401')
+  );
+};
+
 export const App: React.FC = () => {
 
   const location = useLocation();
@@ -184,7 +228,7 @@ export const App: React.FC = () => {
 
     }
 
-    return Boolean(localStorage.getItem('auth_token'));
+    return hasValidSessionToken();
 
   });
 
@@ -299,6 +343,164 @@ export const App: React.FC = () => {
   const [trackingSelectedProject, setTrackingSelectedProject] =
     useState<ProjectItem | null>(null);
 
+  // Feedback Toast
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+
+    setToastMessage(msg);
+
+    setTimeout(() => {
+
+      setToastMessage((prev) => (prev === msg ? null : prev));
+
+    }, 2800);
+
+  }, []);
+
+  // Automatic session timeout logout handler
+  const isLoggingOutRef = useRef(false);
+
+  const handleSessionTimeout = useCallback(
+    (message = 'Your session has expired. Please sign in again.') => {
+      if (isLoggingOutRef.current) return;
+      isLoggingOutRef.current = true;
+
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('pseudoteam_authenticated');
+      localStorage.removeItem('pseudoteam_cart');
+
+      setDashboardError(null);
+      setTrackingError(null);
+      setTicketsError(null);
+      setSparesError(null);
+      setOrdersError(null);
+      setDashboardData(null);
+      setCart([]);
+
+      setIsUploadOpen(false);
+      setIsReportOpen(false);
+      setIsTicketsOpen(false);
+      setIsSparesOpen(false);
+      setIsOrdersOpen(false);
+      setIsCalendarOpen(false);
+      setIsCartOpen(false);
+      setIsNotificationsOpen(false);
+      setIsReferralOpen(false);
+      setIsHelpOpen(false);
+      setIsUserProfileOpen(false);
+      setIsAddLocationOpen(false);
+
+      setIsAuthenticated(false);
+      showToast(message);
+      navigate('/login', { replace: true });
+    },
+    [navigate, showToast]
+  );
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      isLoggingOutRef.current = false;
+    }
+  }, [isAuthenticated]);
+
+  // Global fetch interceptor: immediately log out to /login on any 401 response
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
+      const response = await originalFetch(...args);
+
+      if (response.status === 401) {
+        const requestUrl =
+          typeof args[0] === 'string'
+            ? args[0]
+            : args[0] instanceof Request
+              ? args[0].url
+              : String(args[0]);
+
+        const isAuthEndpoint =
+          requestUrl.includes('/login') ||
+          requestUrl.includes('/signup') ||
+          requestUrl.includes('/register') ||
+          requestUrl.includes('/verify-otp');
+
+        if (!isAuthEndpoint && localStorage.getItem('auth_token')) {
+          handleSessionTimeout('Your session has timed out. Please sign in again.');
+        }
+      }
+
+      return response;
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [handleSessionTimeout]);
+
+  // JWT `exp` timer + inactivity timeout + cross-tab logout sync
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      handleSessionTimeout();
+      return;
+    }
+
+    let jwtTimer: ReturnType<typeof setTimeout> | null = null;
+    const expMs = getJwtExpiryMs(token);
+    if (expMs !== null) {
+      const remaining = expMs - Date.now();
+      if (remaining <= 0) {
+        handleSessionTimeout();
+        return;
+      }
+      jwtTimer = setTimeout(() => {
+        handleSessionTimeout();
+      }, remaining);
+    }
+
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        handleSessionTimeout('Session timed out due to inactivity. Please sign in again.');
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    const activityEvents: (keyof WindowEventMap)[] = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'scroll',
+      'touchstart',
+    ];
+    activityEvents.forEach((evt) =>
+      window.addEventListener(evt, resetIdleTimer, { passive: true })
+    );
+    resetIdleTimer();
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'auth_token' && !e.newValue) {
+        handleSessionTimeout();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      if (jwtTimer) clearTimeout(jwtTimer);
+      if (idleTimer) clearTimeout(idleTimer);
+      activityEvents.forEach((evt) =>
+        window.removeEventListener(evt, resetIdleTimer)
+      );
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [isAuthenticated, handleSessionTimeout]);
+
   // Dedicated route navigation for Location Milestones
 
   // const navigateToLocationMilestones = useCallback((projectId: string, locationId: string) => {
@@ -385,12 +587,13 @@ export const App: React.FC = () => {
       showToast(`Todo "${savedEvent.title}" created successfully.`);
     } catch (error) {
       console.error("Create Todo API Error:", error);
+      const msg = error instanceof Error ? error.message : "Unable to create Todo.";
+      if (isAuthErrorMessage(msg)) {
+        handleSessionTimeout();
+        return;
+      }
 
-      showToast(
-        error instanceof Error
-          ? error.message
-          : "Unable to create Todo."
-      );
+      showToast(msg);
 
       throw error;
     }
@@ -475,13 +678,19 @@ export const App: React.FC = () => {
       } catch (error) {
         if (cancelled) return;
 
-        console.error("Tickets API Error:", error);
-
-        setTicketsError(
+        const msg =
           error instanceof Error
             ? error.message
-            : 'Unable to load tickets.'
-        );
+            : 'Unable to load tickets.';
+
+        if (isAuthErrorMessage(msg)) {
+          handleSessionTimeout();
+          return;
+        }
+
+        console.error("Tickets API Error:", error);
+
+        setTicketsError(msg);
 
       } finally {
         if (!cancelled) {
@@ -496,438 +705,7 @@ export const App: React.FC = () => {
       cancelled = true;
     };
 
-  }, [isAuthenticated]);
-
-  // Sync React Router URL changes to state so browser refresh / back / forward keeps user on exact page
-
-  // useEffect(() => {
-
-  //   const path = location.pathname;
-
-  //   const searchParams = new URLSearchParams(location.search);
-
-  //   // if (path === '/login') {
-
-  //   //   setIsAuthenticated(false);
-
-  //   //   return;
-
-  //   // }
-
-  //   // // Ensure authenticated if user visits or refreshes any workspace route directly
-
-  //   // const stored = localStorage.getItem('pseudoteam_authenticated');
-
-  //   // if (stored !== 'false') {
-
-  //   //   setIsAuthenticated(true);
-
-  //   // }
-
-  //   if (path === '/login') {
-  //     setIsAuthenticated(false);
-  //     return;
-  //   }
-
-  //   // This App does not currently render a separate complete-profile view.
-  //   // Avoid leaving users on an unhandled URL after login.
-  //   if (path === '/complete-profile') {
-  //     navigate('/dashboard', { replace: true });
-  //     return;
-  //   }
-
-  //   const token = localStorage.getItem('auth_token');
-
-  //   if (token) {
-
-  //     setIsAuthenticated(true);
-
-  //   } else {
-
-  //     setIsAuthenticated(false);
-
-  //     navigate('/login');
-
-  //     return;
-
-  //   }
-
-  //   // 1. Tasks Timeline: /projects/:projectId/locations/:locationId/milestones/:milestoneId/tasks
-
-  //   const tasksMatch = path.match(/^\/projects\/([^/]+)\/locations\/([^/]+)\/milestones\/([^/]+)\/tasks\/?$/);
-
-  //   if (tasksMatch) {
-
-  //     const [, pId, lId, mId] = tasksMatch;
-
-  //     // const targetProj = projects.find(p => p.id === pId || p.code.toLowerCase() === pId.toLowerCase() || p.name.toLowerCase().includes(pId.toLowerCase())) || projects[0];
-
-  //     const targetProj =
-  //       (trackingSelectedProject?.id === pId
-  //         ? trackingSelectedProject
-  //         : null) ||
-  //       trackingProjects.find(p => p.id === pId) ||
-  //       projects.find(
-  //         p =>
-  //           p.id === pId ||
-  //           p.code.toLowerCase() === pId.toLowerCase()
-  //       ) ||
-  //       (selectedProject?.id === pId ? selectedProject : null);
-
-  //     if (targetProj) {
-
-  //       setSelectedProject(targetProj);
-
-  //       const targetLoc = (targetProj.locations || []).find(l => l.id === lId || l.city.toLowerCase() === lId.toLowerCase())
-
-  //         || (targetProj.locations && targetProj.locations[0]);
-
-  //       if (targetLoc) {
-
-  //         setSelectedLocation(targetLoc);
-
-  //         const { milestones } = ensureLocationData(targetProj, targetLoc);
-
-  //         const targetMilestone = milestones.find(m => m.id === mId || m.name.toLowerCase().includes(mId.toLowerCase())) || milestones[0];
-
-  //         if (targetMilestone) {
-
-  //           setSelectedMilestone(targetMilestone);
-
-  //         }
-
-  //       }
-
-  //       setCurrentView('milestone-tasks');
-
-  //       setActiveNav('projects');
-
-  //       return;
-
-  //     }
-
-  //   }
-
-  //   // 2. Location Milestones: /projects/:projectId/locations/:locationId/milestones
-
-  //   const locMatch = path.match(/^\/projects\/([^/]+)\/locations\/([^/]+)\/milestones\/?$/);
-
-  //   // if (locMatch) {
-
-  //   //   const [, pId, lId] = locMatch;
-
-  //   //   const targetProj = projects.find(p => p.id === pId || p.code.toLowerCase() === pId.toLowerCase() || p.name.toLowerCase().includes(pId.toLowerCase())) || projects[0];
-
-  //   //   if (targetProj) {
-
-  //   //     setSelectedProject(targetProj);
-
-  //   //     const targetLoc = (targetProj.locations || []).find(l => l.id === lId || l.city.toLowerCase() === lId.toLowerCase())
-
-  //   //       || (targetProj.locations && targetProj.locations[0]);
-
-  //   //     if (targetLoc) {
-
-  //   //       setSelectedLocation(targetLoc);
-
-  //   //     }
-
-  //   //     setCurrentView('location-milestones');
-
-  //   //     setActiveNav('projects');
-
-  //   //     return;
-
-  //   //   }
-
-  //   // }
-
-
-  //   if (locMatch) {
-  //     const [, pId, lId] = locMatch;
-
-  //     const targetProj =
-  //       (trackingSelectedProject?.id === pId
-  //         ? trackingSelectedProject
-  //         : null) ||
-  //       trackingProjects.find(p => p.id === pId) ||
-  //       projects.find(
-  //         p => p.id === pId ||
-  //           p.code.toLowerCase() === pId.toLowerCase()
-  //       );
-
-  //     if (targetProj) {
-  //       setSelectedProject(targetProj);
-
-  //       const targetLoc = (targetProj.locations || []).find(
-  //         l => l.id === lId ||
-  //           l.city.toLowerCase() === lId.toLowerCase()
-  //       );
-
-  //       if (targetLoc) {
-  //         setSelectedLocation(targetLoc);
-  //         setCurrentView('location-milestones');
-  //         setActiveNav('projects');
-  //         return;
-  //       }
-
-  //       console.error("Location not found for project:", pId, lId);
-  //     }
-  //   }
-
-
-  //   // 3. /projects/:projectId/milestones or /milestones (supports ?location=locId)
-
-  //   const milestonesMatch = path.match(/^\/projects\/([^/]+)\/milestones\/?$/) || (path === '/milestones' ? ['/milestones', selectedProject?.id || 'prj-1'] : null);
-
-  //   if (milestonesMatch) {
-
-  //     const pId = milestonesMatch[1];
-
-  //     const targetProj = projects.find(p => p.id === pId || p.code.toLowerCase() === pId.toLowerCase() || p.name.toLowerCase().includes(pId.toLowerCase())) || selectedProject || projects[0];
-
-  //     if (targetProj) {
-
-  //       setSelectedProject(targetProj);
-
-  //       const locQuery = searchParams.get('location');
-
-  //       const targetLoc = locQuery
-
-  //         ? (targetProj.locations || []).find(l => l.id === locQuery || l.city.toLowerCase() === locQuery.toLowerCase()) || (targetProj.locations && targetProj.locations[0])
-
-  //         : (targetProj.locations && targetProj.locations[0]);
-
-  //       if (targetLoc) {
-
-  //         setSelectedLocation(targetLoc);
-
-  //       }
-
-  //       setCurrentView('location-milestones');
-
-  //       setActiveNav('projects');
-
-  //       return;
-
-  //     }
-
-  //   }
-
-  //   // 4. Ticket Details: /tickets/:ticketId
-
-  //   const ticketMatch = path.match(/^\/tickets\/([^/]+)\/?$/);
-
-  //   if (ticketMatch && ticketMatch[1] !== 'new') {
-
-  //     const tId = ticketMatch[1];
-
-  //     // const targetTicket = tickets.find(t =>
-
-  //     //   t.ticketNumber.toLowerCase() === tId.toLowerCase() ||
-
-  //     //   t.id.toLowerCase() === tId.toLowerCase() ||
-
-  //     //   t.ticketNumber.replace(/[^0-9]/g, '') === tId.replace(/[^0-9]/g, '')
-
-  //     // ) || tickets[0];
-
-  //     const targetTicket = tickets.find(t =>
-  //       t.ticketNumber.toLowerCase() === tId.toLowerCase() ||
-  //       t.id.toLowerCase() === tId.toLowerCase() ||
-  //       t.ticketNumber.replace(/[^0-9]/g, '') ===
-  //       tId.replace(/[^0-9]/g, '')
-  //     );
-
-  //     if (targetTicket) {
-  //       setSelectedTicket(targetTicket);
-  //       setCurrentView('ticket-details');
-  //       setActiveNav('tickets');
-  //       return;
-  //     }
-
-  //     if (targetTicket) {
-
-  //       setSelectedTicket(targetTicket);
-
-  //       setCurrentView('ticket-details');
-
-  //       setActiveNav('tickets');
-
-  //       return;
-
-  //     }
-
-  //   }
-
-  //   // 5. Track Tickets List: /tickets
-
-  //   if (path === '/tickets') {
-
-  //     setCurrentView('tickets');
-
-  //     setActiveNav('tickets');
-
-  //     if (searchParams.get('openTicket') === 'true') {
-
-  //       setOpenTicketModalInitially(true);
-
-  //     } else {
-
-  //       setOpenTicketModalInitially(false);
-
-  //     }
-
-  //     return;
-
-  //   }
-
-  //   // 6. Orders History: /orders
-
-  //   if (path === '/orders') {
-
-  //     setCurrentView('orders');
-
-  //     setActiveNav('orders');
-
-  //     return;
-
-  //   }
-
-  //   // 7. Critical Spares: /critical-spares or /spares
-
-  //   if (path === '/critical-spares' || path === '/spares') {
-
-  //     setCurrentView('spares');
-
-  //     setActiveNav('spares');
-
-  //     return;
-
-  //   }
-
-  //   // 8. Reports: /reports
-
-  //   if (path === '/reports') {
-
-  //     setCurrentView('dashboard');
-
-  //     setActiveNav('reports');
-
-  //     setIsReportOpen(true);
-
-  //     return;
-
-  //   }
-
-  //   // 9. Calendar: /calendar
-
-  //   if (path === '/calendar') {
-
-  //     setCurrentView('dashboard');
-
-  //     setActiveNav('calendar');
-
-  //     setIsCalendarOpen(true);
-
-  //     return;
-
-  //   }
-
-  //   // 10. Help / Support Tickets: /help
-
-  //   if (path === '/help') {
-
-  //     setCurrentView('help');
-
-  //     setActiveNav('help');
-
-  //     return;
-
-  //   }
-
-  //   // 11. Account & Profile: /account or /profile
-
-  //   if (path === '/account' || path === '/profile') {
-
-  //     setCurrentView('account');
-
-  //     setActiveNav('account');
-
-  //     return;
-
-  //   }
-
-  //   // 12. Upload Project: /upload-project
-
-  //   if (path === '/upload-project') {
-
-  //     setCurrentView('upload');
-
-  //     setActiveNav('dashboard');
-
-  //     return;
-
-  //   }
-
-  //   // 13. Project Tracking: /projects/:projectId
-
-  //   if (path.startsWith('/projects/')) {
-
-  //     const pId = path.split('/')[2];
-
-  //     const targetProj = projects.find(p => p.id === pId || p.code.toLowerCase() === pId.toLowerCase() || p.name.toLowerCase().includes(pId.toLowerCase()));
-
-  //     if (targetProj) {
-
-  //       setSelectedProject(targetProj);
-
-  //     }
-
-  //     setCurrentView('tracking');
-
-  //     setActiveNav('projects');
-
-  //     return;
-
-  //   }
-
-  //   // 14. Projects generic: /projects
-
-  //   if (path === '/projects') {
-
-  //     setCurrentView('tracking');
-
-  //     setActiveNav('projects');
-
-  //     return;
-
-  //   }
-
-  //   // 15. Dashboard: / or /dashboard
-
-  //   if (path === '/' || path === '/dashboard') {
-
-  //     setCurrentView('dashboard');
-
-  //     setActiveNav('dashboard');
-
-  //     return;
-
-  //   }
-
-  //   // }, [location.pathname, location.search, projects, tickets, selectedProject, navigate]);
-  // }, [
-  //   location.pathname,
-  //   location.search,
-  //   projects,
-  //   tickets,
-  //   selectedProject,
-  //   trackingProjects,
-  //   trackingSelectedProject,
-  //   navigate
-  // ]);
-
+  }, [isAuthenticated, handleSessionTimeout]);
 
 
   useEffect(() => {
@@ -947,13 +725,11 @@ export const App: React.FC = () => {
       return;
     }
 
-    const token = localStorage.getItem('auth_token');
-
-    if (token) {
+    if (hasValidSessionToken()) {
       setIsAuthenticated(true);
     } else {
       setIsAuthenticated(false);
-      navigate('/login');
+      navigate('/login', { replace: true });
       return;
     }
 
@@ -1331,15 +1107,22 @@ export const App: React.FC = () => {
         // (Not Started = 0%, In Progress = 50%, Completed = 100%). Overlay the real milestone/task
         // progress from GET /customer/projects/tracking. If that call fails, keep the dashboard values.
         getProjects()
-          .then((tracking) => {
+          .then(async (tracking) => {
             if (cancelled) return;
+            const summaryList = tracking?.projects || [];
             const byId = new Map(
-              (tracking?.projects || []).map((t) => [String(t.project_id), t])
+              summaryList.map((t) => [String(t.project_id), t])
             );
             if (byId.size === 0) return;
 
+            const mappedTrackingSummaries = summaryList.map(mapTrackingProjectSummary);
+            const mappedById = new Map(
+              mappedTrackingSummaries.map((m) => [String(m.id), m])
+            );
+
             const withRealProgress = (p: ProjectItem): ProjectItem => {
               const t = byId.get(String(p.id));
+              const mapped = mappedById.get(String(p.id));
               if (!t) return p;
               return {
                 ...p,
@@ -1349,6 +1132,11 @@ export const App: React.FC = () => {
                 completedMilestones: t.completed_milestones ?? p.completedMilestones,
                 locationsCount: t.total_locations ?? p.locationsCount,
                 countriesCount: t.total_countries ?? p.countriesCount,
+                expectedCompletion: mapped?.expectedCompletion || p.expectedCompletion,
+                locations:
+                  mapped?.locations && mapped.locations.length > 0
+                    ? mapped.locations
+                    : p.locations,
               };
             };
 
@@ -1357,62 +1145,53 @@ export const App: React.FC = () => {
 
             const values = Array.from(byId.values()).map((t) => Number(t.overall_progress) || 0);
             setOverallProgress(Math.round(values.reduce((a, b) => a + b, 0) / values.length));
+
+            // Fetch full project tracking details when locations with end dates are needed
+            // for the red overdue-location indicator in the Projects table.
+            const projectsNeedingLocations = mappedTrackingSummaries.filter(
+              (m) =>
+                (m.locationsCount ?? 0) > 0 &&
+                (!m.locations ||
+                  m.locations.length === 0 ||
+                  m.locations.every(
+                    (loc: any) =>
+                      !loc.expectedCompletion && !loc.endDate && !loc.dueDate
+                  ))
+            );
+
+            if (projectsNeedingLocations.length > 0) {
+              const detailResults = await Promise.allSettled(
+                projectsNeedingLocations.map((m) => getProject(m.id))
+              );
+              if (cancelled) return;
+
+              const detailById = new Map<string, ProjectItem>();
+              detailResults.forEach((res) => {
+                if (res.status === 'fulfilled' && res.value?.success) {
+                  const detailed = mapProjectTrackingDetail(res.value);
+                  detailById.set(String(detailed.id), detailed);
+                }
+              });
+
+              if (detailById.size > 0) {
+                const mergeLocationDetails = (p: ProjectItem): ProjectItem => {
+                  const detailed = detailById.get(String(p.id));
+                  if (!detailed) return p;
+                  return {
+                    ...p,
+                    expectedCompletion: detailed.expectedCompletion || p.expectedCompletion,
+                    locations: detailed.locations || p.locations,
+                  };
+                };
+
+                setProjects((prev) => prev.map(mergeLocationDetails));
+                setRecentProjects((prev) => prev.map(mergeLocationDetails));
+              }
+            }
           })
           .catch((err) => {
             console.warn('Real project progress unavailable; using dashboard estimates.', err);
           });
-
-        // Notifications
-
-        // setNotifications(
-
-        //   dashboardNotifications.map((item: any) => ({
-
-        //     id: String(item.id),
-
-        //     title: item.title || "",
-
-        //     message: item.message || "",
-
-        //     time: item.time ? String(item.time) : "",
-
-        //     read: Boolean(item.read),
-
-        //     type: "update",
-
-        //     link: item.link || undefined,
-
-        //   }))
-
-        // );
-
-        // setUnreadNotificationsCount(
-
-        //   dashboard.unreadNotificationsCount || 0
-
-        // );
-
-        // Calendar events
-
-        // setEvents(
-
-        //   dashboardCalendarEvents.map((item: any) => ({
-
-        //     id: String(item.id),
-
-        //     title: item.title || "",
-
-        //     date: item.date ? String(item.date).split("T")[0] : "",
-
-        //     time: "",
-
-        //     project: "",
-
-        //     type: "meeting",
-
-        //   }))
-
-        // );
 
       } catch (error) {
 
@@ -1426,10 +1205,6 @@ export const App: React.FC = () => {
 
               : "Unable to load dashboard.";
 
-          setDashboardError(message);
-
-          console.error("Dashboard API error:", error);
-
           // Handle expired/invalid authentication when the API client preserves
           // the HTTP status (Axios: error.response.status; fetch wrappers: error.status).
           const errorStatus =
@@ -1437,13 +1212,14 @@ export const App: React.FC = () => {
               ? (error as any).response?.status ?? (error as any).status
               : undefined;
 
-          if (errorStatus === 401) {
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("pseudoteam_authenticated");
-            setIsAuthenticated(false);
-            setDashboardData(null);
-            navigate("/login", { replace: true });
+          if (errorStatus === 401 || isAuthErrorMessage(message)) {
+            handleSessionTimeout();
+            return;
           }
+
+          setDashboardError(message);
+
+          console.error("Dashboard API error:", error);
 
         }
 
@@ -1467,93 +1243,7 @@ export const App: React.FC = () => {
 
     };
 
-  }, [isAuthenticated, navigate]);
-
-  // Load projects and project details for the Project Tracking screen
-  // useEffect(() => {
-  //   if (!isAuthenticated || currentView !== 'tracking') return;
-
-  //   let cancelled = false;
-
-  //   const loadTrackingData = async () => {
-  //     try {
-  //       setTrackingLoading(true);
-  //       setTrackingError(null);
-
-  //       // 1. Fetch all tracking project summaries
-  //       const response = await getProjects();
-
-  //       if (!response?.success) {
-  //         throw new Error(
-  //           response?.message || 'Unable to load tracking projects.'
-  //         );
-  //       }
-
-  //       if (cancelled) return;
-
-  //       const mappedProjects = (response.projects || []).map(
-  //         mapTrackingProjectSummary
-  //       );
-
-  //       setTrackingProjects(mappedProjects);
-
-  //       if (mappedProjects.length === 0) {
-  //         setTrackingSelectedProject(null);
-  //         return;
-  //       }
-
-  //       // 2. Select the project from the URL, or the first project
-  //       const projectIdFromUrl = location.pathname.split('/')[2];
-
-  //       const selectedSummary =
-  //         mappedProjects.find(p => p.id === projectIdFromUrl) ||
-  //         mappedProjects[0];
-
-  //       // 3. Fetch complete tracking details for the selected project
-  //       const detailResponse = await getProject(selectedSummary.id);
-
-  //       if (cancelled) return;
-
-  //       if (!detailResponse?.success) {
-  //         throw new Error(
-  //           detailResponse?.message || 'Unable to load project details.'
-  //         );
-  //       }
-
-  //       const detailedProject = mapProjectTrackingDetail(detailResponse);
-
-  //       setTrackingSelectedProject(detailedProject);
-
-  //     } catch (error) {
-  //       if (cancelled) return;
-
-  //       console.error('Project Tracking API error:', error);
-
-  //       setTrackingError(
-  //         error instanceof Error
-  //           ? error.message
-  //           : 'Unable to load project tracking data.'
-  //       );
-
-  //       if (error instanceof TrackingApiError && error.status === 401) {
-  //         localStorage.removeItem('auth_token');
-  //         setIsAuthenticated(false);
-  //         navigate('/login', { replace: true });
-  //       }
-
-  //     } finally {
-  //       if (!cancelled) {
-  //         setTrackingLoading(false);
-  //       }
-  //     }
-  //   };
-
-  //   loadTrackingData();
-
-  //   return () => {
-  //     cancelled = true;
-  //   };
-  // }, [isAuthenticated, currentView, location.pathname, navigate]);
+  }, [isAuthenticated, handleSessionTimeout]);
 
   // Load projects and project details for Project Tracking, Location Milestones, and Milestone Tasks
   useEffect(() => {
@@ -1631,19 +1321,22 @@ export const App: React.FC = () => {
       } catch (error) {
         if (cancelled) return;
 
-        console.error('Project Tracking API error:', error);
-
-        setTrackingError(
+        const msg =
           error instanceof Error
             ? error.message
-            : 'Unable to load project tracking data.'
-        );
+            : 'Unable to load project tracking data.';
 
-        if (error instanceof TrackingApiError && error.status === 401) {
-          localStorage.removeItem('auth_token');
-          setIsAuthenticated(false);
-          navigate('/login', { replace: true });
+        if (
+          (error instanceof TrackingApiError && error.status === 401) ||
+          isAuthErrorMessage(msg)
+        ) {
+          handleSessionTimeout();
+          return;
         }
+
+        console.error('Project Tracking API error:', error);
+
+        setTrackingError(msg);
 
       } finally {
         if (!cancelled) {
@@ -1657,23 +1350,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, currentView, location.pathname, trackingProjects, trackingSelectedProject, navigate]);
-
-  // Feedback Toast
-
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-
-    setToastMessage(msg);
-
-    setTimeout(() => {
-
-      setToastMessage((prev) => (prev === msg ? null : prev));
-
-    }, 2800);
-
-  };
+  }, [isAuthenticated, currentView, location.pathname, trackingProjects, trackingSelectedProject, handleSessionTimeout]);
 
   // Sync upload modal trigger with Upload Project Page view
 
@@ -1753,11 +1430,17 @@ export const App: React.FC = () => {
       } catch (error) {
         if (cancelled) return;
 
-        setSparesError(
+        const msg =
           error instanceof Error
             ? error.message
-            : "Unable to load critical spares."
-        );
+            : "Unable to load critical spares.";
+
+        if (isAuthErrorMessage(msg)) {
+          handleSessionTimeout();
+          return;
+        }
+
+        setSparesError(msg);
       } finally {
         if (!cancelled) {
           setSparesLoading(false);
@@ -1770,7 +1453,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, handleSessionTimeout]);
 
 
   useEffect(() => {
@@ -1803,6 +1486,11 @@ export const App: React.FC = () => {
         setNotifications(mappedNotifications);
         setUnreadNotificationsCount(response.unread_count);
       } catch (error) {
+        const msg = error instanceof Error ? error.message : '';
+        if (isAuthErrorMessage(msg)) {
+          handleSessionTimeout();
+          return;
+        }
         console.error("Notification API error:", error);
       }
     };
@@ -1812,7 +1500,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, handleSessionTimeout]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -1839,12 +1527,16 @@ export const App: React.FC = () => {
         setEvents(mappedEvents);
       } catch (error) {
         if (!cancelled) {
-          console.error("Todo API Error:", error);
-          showToast(
+          const msg =
             error instanceof Error
               ? error.message
-              : "Unable to load Todos."
-          );
+              : "Unable to load Todos.";
+          if (isAuthErrorMessage(msg)) {
+            handleSessionTimeout();
+            return;
+          }
+          console.error("Todo API Error:", error);
+          showToast(msg);
         }
       }
     };
@@ -1854,7 +1546,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, handleSessionTimeout, showToast]);
 
 
   useEffect(() => {
@@ -1888,6 +1580,11 @@ export const App: React.FC = () => {
           setCurrentUserAvatar(null);
         }
       } catch (error) {
+        const msg = error instanceof Error ? error.message : '';
+        if (isAuthErrorMessage(msg)) {
+          handleSessionTimeout();
+          return;
+        }
         console.error('Header profile loading error:', error);
       }
     };
@@ -1901,7 +1598,7 @@ export const App: React.FC = () => {
         URL.revokeObjectURL(avatarUrl);
       }
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, handleSessionTimeout]);
 
   useEffect(() => {
     try {
@@ -1948,10 +1645,13 @@ export const App: React.FC = () => {
         }
       } catch (err) {
         if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Unable to load order history.';
+          if (isAuthErrorMessage(msg)) {
+            handleSessionTimeout();
+            return;
+          }
           console.error('Orders API Error:', err);
-          setOrdersError(
-            err instanceof Error ? err.message : 'Unable to load order history.'
-          );
+          setOrdersError(msg);
         }
       } finally {
         if (!cancelled) {
@@ -1965,7 +1665,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, handleSessionTimeout]);
 
   // Active KPI Filter State
 
@@ -2005,34 +1705,6 @@ export const App: React.FC = () => {
 
   }, [activeKpiFilter]);
 
-  // Dynamic KPI counts derived from projects state
-
-  // const kpiStats = useMemo(() => {
-
-  //   const notStarted = projects.filter(p => p.status === 'Not Started').length;
-
-  //   const inProgress = projects.filter(p => p.status === 'In Progress').length;
-
-  //   const completed = projects.filter(p => p.status === 'Completed' || p.status === 'Delivered').length;
-
-  //   const critical = projects.filter(p => p.status === 'Critical' || p.status === 'At Risk' || p.status === 'On Hold').length;
-
-  //   return {
-
-  //     totalProjects: notStarted,
-
-  //     notStarted,
-
-  //     inProgress,
-
-  //     completed,
-
-  //     critical
-
-  //   };
-
-  // }, [projects]);
-
   const kpiStats = useMemo(() => {
 
     const kpis = dashboardData?.dashboard?.projectKpis;
@@ -2070,55 +1742,6 @@ export const App: React.FC = () => {
     };
 
   }, [dashboardData]);
-
-  // const displayedRecentProjects = useMemo(() => {
-
-  //   // let result = recentProjects;
-  //       let result = projects;
-
-  //   if (activeKpiFilter === 'not_started') {
-
-  //     result = result.filter(p => p.status === 'Not Started');
-
-  //   } else if (activeKpiFilter === 'in_progress') {
-
-  //     result = result.filter(p => p.status === 'In Progress');
-
-  //   } else if (activeKpiFilter === 'delivered') {
-
-  //     result = result.filter(
-
-  //       p => p.status === 'Completed' || p.status === 'Delivered'
-
-  //     );
-
-  //   } else if (activeKpiFilter === 'at_risk') {
-
-  //     result = result.filter(
-
-  //       p => ['Critical', 'At Risk', 'On Hold'].includes(p.status)
-
-  //     );
-
-  //   }
-
-  //   if (!searchQuery.trim()) return result;
-
-  //   const q = searchQuery.toLowerCase();
-
-  //   return result.filter(p =>
-
-  //     p.name.toLowerCase().includes(q) ||
-
-  //     p.customer.toLowerCase().includes(q) ||
-
-  //     p.code.toLowerCase().includes(q) ||
-
-  //     p.category.toLowerCase().includes(q)
-
-  //   );
-
-  // }, [projects, activeKpiFilter, searchQuery]);
 
   const displayedRecentProjects = useMemo(() => {
     let result = projects;
@@ -2190,57 +1813,6 @@ export const App: React.FC = () => {
 
     navigate(`/projects/${response.project.id}`);
   };
-
-  // Add spare item to cart
-
-  // changes done by vb: accepts a quantity (from the Qty picker) instead of always adding 1
-  // const handleAddToCart = (spare: CriticalSpareItem, quantity: number = 1) => {
-
-  //   const qty = Math.max(1, Math.floor(quantity) || 1);
-
-  //   setCart(prev => {
-
-  //     const existing = prev.find(item => item.id === spare.id);
-
-  //     if (existing) {
-
-  //       return prev.map(item =>
-
-  //         // changes done by vb: add the chosen qty instead of +1
-  //         item.id === spare.id ? { ...item, quantity: item.quantity + qty } : item
-
-  //       );
-
-  //     }
-
-  //     return [
-
-  //       ...prev,
-
-  //       {
-
-  //         id: spare.id,
-
-  //         name: spare.name,
-
-  //         partNumber: spare.partNumber,
-
-  //         // changes done by vb: String() so numeric unitCost from the API doesn't crash .replace
-  //         unitPrice: parseFloat(String(spare.unitCost).replace(/[^0-9.]/g, '')) || 450,
-
-  //         quantity: qty, // changes done by vb
-
-  //         category: spare.category
-
-  //       }
-
-  //     ];
-
-  //   });
-
-  //   showToast(`Added ${qty} × ${spare.name} to Requisition Cart.`); // changes done by vb
-
-  // };
 
   // Add spare item to cart (capped at available stock) and open cart drawer
   const handleAddToCart = (spare: CriticalSpareItem, quantity: number = 1) => {
@@ -2329,30 +1901,6 @@ export const App: React.FC = () => {
       })
     );
   };
-
-  // Update Cart Quantity
-
-  // const handleUpdateCartQuantity = (id: string, delta: number) => {
-
-  //   setCart(prev =>
-
-  //     prev.map(item => {
-
-  //       if (item.id === id) {
-
-  //         const newQty = item.quantity + delta;
-
-  //         return newQty > 0 ? { ...item, quantity: newQty } : item;
-
-  //       }
-
-  //       return item;
-
-  //     })
-
-  //   );
-
-  // };
 
   // Remove Item from Cart
 
@@ -2501,10 +2049,13 @@ export const App: React.FC = () => {
 
       setUnreadNotificationsCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unable to update notification.";
+      if (isAuthErrorMessage(msg)) {
+        handleSessionTimeout();
+        return;
+      }
       console.error("Failed to mark notification as read:", error);
-      showToast(
-        error instanceof Error ? error.message : "Unable to update notification."
-      );
+      showToast(msg);
     }
   };
 
@@ -2521,10 +2072,13 @@ export const App: React.FC = () => {
       setUnreadNotificationsCount(0);
       showToast("All notifications marked as read.");
     } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unable to update notifications.";
+      if (isAuthErrorMessage(msg)) {
+        handleSessionTimeout();
+        return;
+      }
       console.error("Failed to mark all notifications as read:", error);
-      showToast(
-        error instanceof Error ? error.message : "Unable to update notifications."
-      );
+      showToast(msg);
     }
   };
 
@@ -2535,56 +2089,10 @@ export const App: React.FC = () => {
 
       <>
 
-        {/* <LoginPage 
-
-          onLoginSuccess={(username, profileData) => {
-
-            localStorage.setItem('pseudoteam_authenticated', 'true');
-
-            setIsAuthenticated(true);
-
-            if (profileData) {
-
-              setUserProfileData(profileData);
-
-            }
-
-            if (profileData && (profileData.country || profileData.city || profileData.entityType)) {
-
-              showToast(`Profile completed! Welcome to your workspace, ${username || 'Vaniya Batra'}.`);
-
-            } else {
-
-              showToast(`Welcome back, ${username || 'Vaniya Batra'}`);
-
-            }
-
-            navigate('/dashboard');
-
-          }} 
-
-        /> */}
-
         <LoginPage
 
-          // onLoginSuccess={(username, profileData) => {
-
-          //   setIsAuthenticated(true);
-
-          //   if (profileData) {
-
-          //     setUserProfileData(profileData);
-
-          //   }
-
-          //   showToast(`Welcome back, ${username || 'Customer'}!`);
-
-          //   // The complete-profile view is not implemented in this App yet.
-          //   navigate('/dashboard');
-
-          // }}
-
           onLoginSuccess={(username, profileData) => {
+            isLoggingOutRef.current = false;
             setIsAuthenticated(true);
 
             if (username) {
@@ -2633,76 +2141,6 @@ export const App: React.FC = () => {
 
       {/* 1. Global Header (56px) */}
 
-      {/* <Header
-
-        activeNav={activeNav}
-
-        onNavClick={handleNavClick}
-
-        searchQuery={searchQuery}
-
-        onSearchChange={setSearchQuery}
-
-        notifications={notifications}
-
-        cart={cart}
-
-        projects={projects}
-
-        events={events}
-
-        onAddEvent={(newEvent) => {
-
-          setEvents(prev => [newEvent, ...prev]);
-
-          showToast(`Event "${newEvent.title}" scheduled.`);
-
-        }}
-
-        onOpenFullCalendar={() => navigate('/calendar')}
-
-        onSelectProject={(projectId) => navigate(`/projects/${projectId}`)}
-
-        onOpenUpload={() => navigate('/upload-project')}
-
-        onOpenCart={() => setIsCartOpen(true)}
-
-        onOpenNotifications={() => setIsNotificationsOpen(true)}
-
-        onOpenProfile={() => navigate('/account')}
-
-        onOpenReferral={() => setIsReferralOpen(true)}
-
-        // onLogout={() => {
-
-        //   localStorage.setItem('pseudoteam_authenticated', 'false');
-
-        //   setIsAuthenticated(false);
-
-        //   showToast('Signed out of PseudoTeam workspace.');
-
-        //   navigate('/login');
-
-        // }}
-
-        onLogout={() => {
-
-          localStorage.removeItem('auth_token');
-
-          localStorage.removeItem('pseudoteam_authenticated');
-
-          setIsAuthenticated(false);
-
-          setDashboardData(null);
-
-          showToast('Signed out of PseudoTeam workspace.');
-
-          navigate('/login');
-
-        }}
-
-      /> */}
-
       <Header
         activeNav={activeNav}
         onNavClick={handleNavClick}
@@ -2718,10 +2156,6 @@ export const App: React.FC = () => {
         userName={currentUserName}
         userEmail={currentUserEmail}
         avatarUrl={currentUserAvatar}
-        // onAddEvent={(newEvent) => {
-        //   setEvents(prev => [newEvent, ...prev]);
-        //   showToast(`Event "${newEvent.title}" scheduled.`);
-        // }}
         onAddEvent={handleAddTodo}
         onOpenFullCalendar={() => navigate('/calendar')}
         onSelectProject={(projectId) => navigate(`/projects/${projectId}`)}
@@ -2730,16 +2164,6 @@ export const App: React.FC = () => {
         onOpenNotifications={() => setIsNotificationsOpen(true)}
         onOpenProfile={() => navigate('/account')}
         onOpenReferral={() => setIsReferralOpen(true)}
-        // onLogout={() => {
-        //   localStorage.removeItem('auth_token');
-        //   localStorage.removeItem('pseudoteam_authenticated');
-
-        //   setIsAuthenticated(false);
-        //   setDashboardData(null);
-
-        //   showToast('Signed out of PseudoTeam workspace.');
-        //   navigate('/login');
-        // }}
         onLogout={() => {
           localStorage.removeItem('auth_token');
           localStorage.removeItem('pseudoteam_authenticated');
@@ -2772,57 +2196,17 @@ export const App: React.FC = () => {
 
       {currentView === 'upload' ? (
 
-        // <UploadProjectView
-
-        //   onCancel={() => navigate('/dashboard')}
-
-        //   onAddProject={handleAddProject}
-
-        // />
-
         <UploadProjectView
           onCancel={() => navigate('/dashboard')}
           onAddProject={handleUploadProject}
         />
-
-        // ) : currentView === 'tracking' ? (
-
-        //   <ProjectTrackingView
-
-        //     project={selectedProject}
-
-        //     allProjects={projects}
-
-        //     onSelectProject={(p) => navigate(`/projects/${p.id}`)}
-
-        //     onBackToDashboard={() => navigate('/dashboard')}
-
-        //     onGenerateReport={() => navigate('/reports')}
-
-        //     onViewTickets={() => navigate('/tickets')}
-
-        //     onRequestSpare={() => setIsSparesOpen(true)}
-
-        //     onAddLocation={() => setIsAddLocationOpen(true)}
-
-        //     onViewLocationDetails={(loc) => {
-
-        //       navigateToLocationMilestones(selectedProject.id, loc.id);
-
-        //     }}
-
-        //     onUploadDocs={() => navigate('/upload-project')}
-
-        //   />
-
-        // ) : currentView === 'location-milestones' && selectedLocation ? (
 
       ) : currentView === 'tracking' ? (
         trackingLoading ? (
           <div className="flex-1 flex items-center justify-center text-sm text-slate-500">
             Loading project tracking...
           </div>
-        ) : trackingError ? (
+        ) : trackingError && !isAuthErrorMessage(trackingError) ? (
           <div
             className="m-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
             role="alert"
@@ -2954,18 +2338,6 @@ export const App: React.FC = () => {
 
         />
 
-        // ) : currentView === 'spares' ? (
-
-        //   <CriticalSparesView
-
-        //     spares={spares}
-
-        //     onBackToDashboard={() => navigate('/dashboard')}
-
-        //     onAddToCart={handleAddToCart}
-
-        //   />
-
       ) : currentView === 'spares' ? (
 
         <CriticalSparesView
@@ -2982,25 +2354,6 @@ export const App: React.FC = () => {
 
       ) : currentView === 'tickets' ? (
 
-        // <TicketsView
-
-        //   tickets={tickets}
-
-        //   onBackToDashboard={() => navigate('/dashboard')}
-
-        //   onViewTicketDetails={(tkt) => {
-
-        //     setSelectedTicket(tkt);
-
-        //     navigate(`/tickets/${tkt.ticketNumber}`);
-
-        //   }}
-
-        //   onAddTicket={handleAddTicket}
-
-        //   isOpenModalInitial={openTicketModalInitially}
-
-        // />
         <TicketsView
           tickets={tickets}
           projects={projects}
@@ -3040,7 +2393,7 @@ export const App: React.FC = () => {
 
           orders={orders}
           loading={ordersLoading}
-          error={ordersError}
+          error={ordersError && !isAuthErrorMessage(ordersError) ? ordersError : null}
 
           onBackToDashboard={() => navigate('/dashboard')}
 
@@ -3098,7 +2451,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {dashboardError && (
+          {dashboardError && !isAuthErrorMessage(dashboardError) && (
             <div
               className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
               role="alert"
@@ -3127,18 +2480,20 @@ export const App: React.FC = () => {
 
           </div>
 
-          {/* Grid Row 1: Recent Projects + Project Progress Overview + Calendar */}
+          {/* Grid Row 1: Projects + Project Progress Overview + Calendar */}
 
           {/* changes done by vb
               Only stretch/shrink to fill the viewport at xl, where the dashboard is a fixed-height layout.
               Below xl the page scrolls, so this row must keep its natural height or it overlaps Row 2. */}
           <div className="shrink-0 xl:shrink xl:flex-1 xl:min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-2.5">
 
-            {/* Recent Projects Table */}
+            {/* Projects Table */}
 
             <div className="col-span-1 md:col-span-2 xl:col-span-5 h-auto md:h-[340px] xl:h-full min-h-[260px] xl:min-h-0">
 
               <RecentProjectsTable
+
+                title="Projects"
 
                 projects={displayedRecentProjects}
 
@@ -3155,18 +2510,6 @@ export const App: React.FC = () => {
               />
 
             </div>
-
-            {/* Project Progress Overview */}
-
-            {/* <div className="col-span-1 md:col-span-1 xl:col-span-4 h-auto md:h-[340px] xl:h-full min-h-[250px] xl:min-h-0">
-
-              <ProjectProgressOverview
-
-                onViewFullReports={() => navigate('/reports')}
-
-              />
-
-            </div> */}
 
             {/* Project Progress Overview */}
             <div className="col-span-1 md:col-span-1 xl:col-span-4 h-auto md:h-[340px] xl:h-full min-h-[250px] xl:min-h-0">
@@ -3187,14 +2530,6 @@ export const App: React.FC = () => {
                 onViewAll={() => navigate('/calendar')}
 
                 onOpenFullCalendar={() => navigate('/calendar')}
-
-                // onAddEvent={(newEvent) => {
-
-                //   setEvents(prev => [newEvent, ...prev]);
-
-                //   showToast(`Event "${newEvent.title}" scheduled.`);
-
-                // }}
 
                 onAddEvent={handleAddTodo}
 
@@ -3326,18 +2661,6 @@ export const App: React.FC = () => {
 
       />
 
-      {/* <CriticalSparesModal
-
-        isOpen={isSparesOpen}
-
-        onClose={() => setIsSparesOpen(false)}
-
-        spares={spares}
-
-        onAddToCart={handleAddToCart}
-
-      /> */}
-
       <CriticalSparesModal
 
         isOpen={isSparesOpen}
@@ -3376,7 +2699,7 @@ export const App: React.FC = () => {
 
         events={events}
 
-        onAddEvent={handleAddTodo} // changes done by vb: "+ New event" in the Teams-style calendar saves a Todo
+        onAddEvent={handleAddTodo}
 
       />
 
@@ -3398,25 +2721,6 @@ export const App: React.FC = () => {
 
       />
 
-      {/* <NotificationsPanel
-
-        isOpen={isNotificationsOpen}
-
-        onClose={() => setIsNotificationsOpen(false)}
-
-        notifications={notifications}
-
-        onMarkAllAsRead={() => {
-
-          setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-
-          showToast('All notifications marked as read.');
-
-        }}
-
-      /> */}
-
-
       <NotificationsPanel
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
@@ -3424,7 +2728,6 @@ export const App: React.FC = () => {
         onMarkAsRead={handleMarkNotificationAsRead}
         onMarkAllAsRead={handleMarkAllNotificationsAsRead}
       />
-
 
       <ReferralModal
 
@@ -3459,20 +2762,6 @@ export const App: React.FC = () => {
           navigate('/account');
 
         }}
-
-        // onLogout={() => {
-
-        //   setIsUserProfileOpen(false);
-
-        //   localStorage.setItem('pseudoteam_authenticated', 'false');
-
-        //   setIsAuthenticated(false);
-
-        //   showToast('Signed out of PseudoTeam workspace.');
-
-        //   navigate('/login');
-
-        // }}
 
         onLogout={() => {
 
@@ -3510,66 +2799,6 @@ export const App: React.FC = () => {
 
 };
 
-// const mapDashboardProject = (
-
-//   project: any,
-
-//   progressData: any[] = []
-
-// ): ProjectItem => {
-
-//   const progressEntry = progressData.find(
-
-//     (item) => String(item.id) === String(project.id)
-
-//   );
-
-//   const status = project.status || "Unknown";
-
-//   return {
-
-//     id: String(project.id),
-
-//     code: String(project.projectId || project.id),
-
-//     name: project.title || "Untitled Project",
-
-//     customer: project.customerName || "",
-
-//     category: project.category || project.type || "General",
-
-//     status: status as ProjectItem["status"],
-
-//     progress: progressEntry?.progress ?? 0,
-
-//     currentPhase: project.statusDescription || status,
-
-//     velocity: "",
-
-//     manager: "",
-
-//     startDate: project.startDate || "",
-
-//     expectedCompletion: project.endDate || "",
-
-//     budget: String(project.budget ?? 0),
-
-//     lastUpdated: project.updatedAt || project.createdAt || "",
-
-//     milestonesCount: 0,
-
-//     completedMilestones: 0,
-
-//     locationsCount: 0,
-
-//     countriesCount: 0,
-
-//     locations: [],
-
-//   };
-
-// };
-
 const mapDashboardProject = (
   project: any,
   progressData: any[] = []
@@ -3585,6 +2814,8 @@ const mapDashboardProject = (
     project.final_price ??
     project.plist_final_price ??
     null;
+
+  const rawLocations = Array.isArray(project.locations) ? project.locations : [];
 
   return {
     id: String(project.id),
@@ -3609,7 +2840,7 @@ const mapDashboardProject = (
 
     startDate: project.startDate || "",
 
-    expectedCompletion: project.endDate || "",
+    expectedCompletion: project.endDate || project.expectedCompletion || "",
 
     budget: String(project.budget ?? 0),
 
@@ -3621,11 +2852,11 @@ const mapDashboardProject = (
 
     completedMilestones: 0,
 
-    locationsCount: 0,
+    locationsCount: rawLocations.length,
 
     countriesCount: 0,
 
-    locations: [],
+    locations: rawLocations,
   };
 };
 

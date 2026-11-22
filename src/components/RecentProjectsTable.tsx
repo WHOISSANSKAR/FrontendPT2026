@@ -3,6 +3,7 @@ import { ArrowRight, X } from 'lucide-react';
 import { ProjectItem } from '../types';
 
 interface RecentProjectsTableProps {
+  title?: string;
   projects: ProjectItem[];
   onSelectProject: (projectId: string) => void;
   onViewAll?: () => void;
@@ -13,6 +14,7 @@ interface RecentProjectsTableProps {
 }
 
 export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
+  title = 'Projects',
   projects,
   onSelectProject,
   onViewAll,
@@ -42,6 +44,69 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
     if (!Number.isNaN(d.getTime())) return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
     return v;
   };
+
+  // Parse date strings reliably across ISO, YYYY-MM-DD, and DD/MM/YYYY formats
+  const parseDateValue = (value?: string | null): Date | null => {
+    if (!value) return null;
+    const v = String(value).trim();
+    if (!v) return null;
+
+    let m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) {
+      return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999);
+    }
+
+    m = v.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (m) {
+      return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), 23, 59, 59, 999);
+    }
+
+    const parsed = new Date(v);
+    if (!Number.isNaN(parsed.getTime())) {
+      parsed.setHours(23, 59, 59, 999);
+      return parsed;
+    }
+
+    return null;
+  };
+
+  // Check if a target end date has passed (ignoring Completed / Delivered / Cancelled items)
+  const isDateOverdue = (dateStr?: string | null, status?: string): boolean => {
+    const normalizedStatus = (status || '').toLowerCase();
+    if (
+      normalizedStatus === 'completed' ||
+      normalizedStatus === 'delivered' ||
+      normalizedStatus === 'cancelled'
+    ) {
+      return false;
+    }
+
+    const dueEnd = parseDateValue(dateStr);
+    if (!dueEnd) return false;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    return dueEnd.getTime() < todayStart.getTime();
+  };
+
+  // Red dot indicator: any location in the project has crossed its end date
+  const hasOverdueLocation = (project: ProjectItem): boolean => {
+    const locations = project.locations || [];
+    return locations.some((loc: any) =>
+      isDateOverdue(
+        loc.expectedCompletion || loc.endDate || loc.dueDate || loc.targetDate,
+        loc.status
+      )
+    );
+  };
+
+  // Red outline indicator: the project itself has crossed its end date
+  const isProjectOverdue = (project: ProjectItem): boolean =>
+    isDateOverdue(
+      project.expectedCompletion || (project as any).endDate,
+      project.status
+    );
 
   const getInitials = (project: ProjectItem) => {
     if (project.code && project.code.length <= 4) {
@@ -174,7 +239,7 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
       <div className="flex items-center justify-between pb-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <h2 className="text-sm font-bold text-slate-900 tracking-tight shrink-0">
-            Recent Projects
+            {title}
           </h2>
 
           <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full shrink-0">
@@ -226,15 +291,29 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
             projects.map((project) => {
               const badge = getInitials(project);
               const badgeColor = getBadgeStyle(badge);
+              const locationOverdue = hasOverdueLocation(project);
+              const projectOverdue = isProjectOverdue(project);
 
               return (
                 <div 
                   key={project.id}
                   id={`recent-project-mobile-card-${project.id}`}
-                  className="p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-blue-50/30 transition-colors flex flex-col gap-2"
+                  title={projectOverdue ? 'Project end date has passed' : undefined}
+                  className={`p-2.5 rounded-xl transition-colors flex flex-col gap-2 ${
+                    projectOverdue
+                      ? 'border border-red-500 ring-1 ring-inset ring-red-500 bg-red-50/30 hover:bg-red-50/50'
+                      : 'border border-slate-100 bg-slate-50/50 hover:bg-blue-50/30'
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
+                      {locationOverdue && (
+                        <span
+                          title="One or more locations have passed their end date"
+                          aria-label="Location end date overdue"
+                          className="w-2 h-2 rounded-full bg-red-500 shrink-0"
+                        />
+                      )}
                       <div className={`w-6 h-6 rounded-md ${badgeColor} flex items-center justify-center font-bold text-[10px] shrink-0`}>
                         {badge}
                       </div>
@@ -310,16 +389,30 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
               projects.map((project) => {
                 const badge = getInitials(project);
                 const badgeColor = getBadgeStyle(badge);
+                const locationOverdue = hasOverdueLocation(project);
+                const projectOverdue = isProjectOverdue(project);
 
                 return (
                   <tr 
                     key={project.id}
                     id={`recent-project-row-${project.id}`}
-                    className="hover:bg-slate-50/70 transition-colors h-9"
+                    title={projectOverdue ? 'Project end date has passed' : undefined}
+                    className={`transition-colors h-9 ${
+                      projectOverdue
+                        ? 'outline outline-1 -outline-offset-1 outline-red-500 rounded-lg bg-red-50/25 hover:bg-red-50/45'
+                        : 'hover:bg-slate-50/70'
+                    }`}
                   >
-                    {/* Project name + badge */}
-                    <td className="py-1.5 pr-2">
+                    {/* Project name + badge + overdue location red dot */}
+                    <td className="py-1.5 pr-2 pl-1.5">
                       <div className="flex items-center gap-2">
+                        {locationOverdue && (
+                          <span
+                            title="One or more locations have passed their end date"
+                            aria-label="Location end date overdue"
+                            className="w-2 h-2 rounded-full bg-red-500 shrink-0"
+                          />
+                        )}
                         <div className={`w-6 h-6 rounded-md ${badgeColor} flex items-center justify-center font-bold text-[10px] shrink-0`}>
                           {badge}
                         </div>
@@ -361,7 +454,7 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
                     </td>
 
                     {/* Action Button */}
-                    <td className="py-1.5 text-center whitespace-nowrap"> {/* changes done by vb: centred */}
+                    <td className="py-1.5 pr-1.5 text-center whitespace-nowrap"> {/* changes done by vb: centred */}
                       <button
                         onClick={() => onSelectProject(project.id)}
                         id={`btn-view-${project.id}`}
