@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react'; // changes done by vb
 import {
   Mail,
   Lock,
@@ -17,8 +17,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LightEnterpriseBackground } from './auth/LightEnterpriseBackground';
 import { customerLogin, customerRegister } from '../services/authService'; // changes done by vb: + customerRegister
 import { AuthLoader } from './auth/AuthLoader'; // changes done by vb
-import { AuthAnimatedBackground } from './auth/AuthAnimatedBackground'; // changes done by vb
+import { AuthBackdrop } from './auth/AuthBackdrop'; // changes done by vb
 import { LANDING_URL } from '../config/links'; // changes done by vb
+import { PhoneConversation } from './auth/PhoneConversation'; // changes done by vb
 
 export interface UserProfileData {
   country?: string;
@@ -96,7 +97,7 @@ const AuthField: React.FC<AuthFieldProps> = ({
       <label htmlFor={id} className="text-[13px] font-semibold text-[#0F172A]">{label}</label>
       {labelAside}
     </div>
-    <div className="group flex h-12 items-center gap-2.5 rounded-xl border border-[#DCE3EE] bg-white/90 px-3.5 transition-all duration-150 hover:border-[#C5D0E0] focus-within:border-[#2563EB] focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10">
+    <div className="group flex h-12 [@media(max-height:820px)]:h-11 items-center gap-2.5 rounded-xl border border-white/70 bg-white/45 px-3.5 backdrop-blur-md transition-all duration-150 hover:border-white focus-within:border-[#2563EB] focus-within:bg-white/80 focus-within:ring-4 focus-within:ring-blue-500/10" /* changes done by vb */>
       <Icon className="h-[18px] w-[18px] shrink-0 text-slate-400 transition-colors group-focus-within:text-[#2563EB]" />
       <input
         id={id}
@@ -467,6 +468,31 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       'London', 'Munich', 'Dubai', 'Singapore', 'Sydney', 'Tokyo'
     ];
 
+  // changes done by vb
+  const formAreaRef = useRef<HTMLElement>(null);
+  const formCardRef = useRef<HTMLDivElement>(null);
+  const [formFit, setFormFit] = useState(1);
+  const [formNaturalH, setFormNaturalH] = useState(0);
+  useLayoutEffect(() => {
+    const area = formAreaRef.current;
+    const card = formCardRef.current;
+    if (!area || !card) return;
+    const measure = () => {
+      const available = area.clientHeight - 8;
+      const natural = card.offsetHeight;
+      if (!natural) return;
+      const next = Math.round(Math.min(1, Math.max(0.6, available / natural)) * 1000) / 1000;
+      setFormNaturalH((prev) => (Math.abs(prev - natural) < 1 ? prev : natural));
+      setFormFit((prev) => (Math.abs(prev - next) < 0.005 ? prev : next));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => window.requestAnimationFrame(measure));
+    ro.observe(area);
+    ro.observe(card);
+    return () => ro.disconnect();
+  }, [phase, authMode]);
+
   // ===================================================================
   // changes done by vb: REDESIGNED SIGN-IN / SIGN-UP + POST-LOGIN LOADER
   // Split layout: brand panel (lg+) on the left, form on the right.
@@ -482,7 +508,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         className="auth-font fixed inset-0 flex min-h-screen w-full items-center justify-center overflow-y-auto p-6"
       >
         {/* changes done by vb: animated background + new font on the loader */}
-        <AuthAnimatedBackground />
+        <AuthBackdrop />
         <AuthLoader
           userName={authenticatedUser}
           progress={progressPercent}
@@ -500,38 +526,52 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     return (
       <div
         id="pseudoteam-login-screen"
-        className="auth-font fixed inset-0 w-full min-h-screen overflow-y-auto text-[#0F172A]"
+        className="auth-font fixed inset-0 h-dvh w-full overflow-hidden text-[#0F172A]" /* changes done by vb */
       >
         {/* changes done by vb: animated background + new font (DM Sans body / Sora headings) */}
-        <AuthAnimatedBackground />
+        <AuthBackdrop />
+        {/* changes done by vb */}
+        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+          <div className="absolute left-1/2 top-1/2 h-[260px] w-[260px] -translate-x-[70%] -translate-y-[60%] rounded-full bg-gradient-to-br from-sky-400/45 to-blue-600/40 blur-3xl sm:h-[420px] sm:w-[420px] lg:left-3/4" />
+          <div className="absolute left-1/2 top-1/2 h-[240px] w-[240px] -translate-x-[30%] -translate-y-[5%] rounded-full bg-gradient-to-br from-indigo-400/40 to-fuchsia-400/30 blur-3xl sm:h-[360px] sm:w-[360px] sm:-translate-x-[10%] lg:left-3/4" />
+        </div>
 
         {/* changes done by vb: "Back to home" sits in the top-left corner of the page (outside the card) */}
         <a
           id="link-back-to-home"
           href={LANDING_URL}
-          className="group absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/80 bg-white/85 px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-[0_6px_18px_rgba(30,64,175,0.12)] backdrop-blur-md transition-colors hover:border-blue-300 hover:text-blue-700 sm:left-6 sm:top-6 sm:text-[13px]"
+          className="group absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/80 bg-white/85 px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-[0_6px_18px_rgba(30,64,175,0.12)] backdrop-blur-md transition-colors hover:border-blue-300 hover:text-blue-700 sm:left-6 sm:top-6 sm:text-[13px] lg:left-auto lg:right-10" /* changes done by vb */
         >
           <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
           Back to home
         </a>
 
-        {/* changes done by vb: left brand panel removed — just the centered form on the animated background
-            (extra top padding on small screens leaves room for the Back to home button) */}
-        <div className="relative z-10 mx-auto flex min-h-full w-full items-center justify-center p-3 pt-16 sm:p-6 sm:pt-20">
-          <main className="relative flex w-full items-center justify-center py-6 sm:py-10">
-            {/* changes done by vb: frosted-glass card so the animated background shows through */}
+        {/* changes done by vb */}
+        <div className="relative z-10 mx-auto grid h-full w-full max-w-[1400px] grid-cols-1 items-center gap-6 px-3 pb-3 pt-14 sm:px-6 sm:pb-5 sm:pt-16 lg:grid-cols-2 lg:gap-10 lg:px-10">
+          <section className="relative hidden h-full min-h-0 lg:block">
+            <PhoneConversation />
+          </section>
+
+          <main ref={formAreaRef} className="relative flex h-full min-h-0 w-full items-center justify-center">
+            {/* changes done by vb */}
+            <div
+              className="relative flex w-full max-w-[440px] items-start justify-center"
+              style={{ height: formFit < 1 ? formNaturalH * formFit : undefined }}
+            > {/* changes done by vb */}
             <div
               id="login-form-wrapper"
-              className="w-full max-w-[440px] rounded-[26px] border border-white/80 bg-white/75 p-6 shadow-[0_24px_60px_rgba(30,64,175,0.12),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl sm:p-9"
+              ref={formCardRef}
+              className="relative w-full max-w-[440px] overflow-hidden rounded-[28px] border border-white/60 bg-gradient-to-br from-white/50 via-white/25 to-white/10 p-6 shadow-[0_30px_70px_rgba(30,64,175,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-1px_0_rgba(255,255,255,0.25)] backdrop-blur-2xl backdrop-saturate-150 sm:p-9 [@media(max-height:820px)]:sm:p-7" /* changes done by vb */
               style={{
                 opacity: phase === 'form-fading-out' ? 0 : 1,
-                transform: phase === 'form-fading-out' ? 'translateY(6px) scale(0.98)' : 'none',
-                transition: 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1)',
+                transform: `scale(${formFit})${phase === 'form-fading-out' ? ' translateY(6px) scale(0.98)' : ''}`, // changes done by vb
+                transformOrigin: 'top center', // changes done by vb
+                transition: phase === 'form-fading-out' ? 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' : 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)', // changes done by vb
                 pointerEvents: phase === 'form-fading-out' ? 'none' : 'auto',
               }}
             >
               {/* Logo — changes done by vb: now shown on all screen sizes (brand panel removed) */}
-              <div className="mb-7 flex justify-center">
+              <div className="mb-7 flex justify-center [@media(max-height:820px)]:mb-4"> {/* changes done by vb */}
                 {/* changes done by vb: new PseudoTeam logo (public/pseudoteam-logo.png) on a dark navy badge
                     so its light text is readable on the white card */}
                 <span className="inline-flex items-center rounded-2xl bg-gradient-to-br from-[#0B1736] to-[#1E3A8A] px-3 py-1 shadow-[0_8px_20px_rgba(11,23,54,0.28)] ring-1 ring-white/10">
@@ -539,7 +579,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     id="pseudoteam-logo"
                     src="/pseudoteam-logo.png"
                     alt="PseudoTeam"
-                    className="h-12 w-auto max-w-[170px] object-contain select-none"
+                    className="h-12 w-auto max-w-[170px] object-contain select-none [@media(max-height:820px)]:h-10" /* changes done by vb */
                     referrerPolicy="no-referrer"
                   />
                 </span>
@@ -549,8 +589,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <div
                 role="tablist"
                 aria-label="Choose sign in or create account"
-                className="mb-7 grid grid-cols-2 rounded-xl bg-[#E8EEF8]/80 p-1 text-sm font-semibold"
+                className="relative mb-7 grid grid-cols-2 rounded-xl border border-white/50 bg-white/30 p-1 text-sm font-semibold backdrop-blur-md [@media(max-height:820px)]:mb-4" /* changes done by vb */
               >
+                {/* changes done by vb */}
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute bottom-1 left-1 top-1 w-[calc(50%-4px)] rounded-lg bg-white shadow-[0_1px_3px_rgba(15,23,42,0.1)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                  style={{ transform: isSignup ? 'translateX(100%)' : 'translateX(0)' }}
+                />
                 {(['login', 'signup'] as const).map((mode) => (
                   <button
                     key={mode}
@@ -559,11 +605,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     type="button"
                     aria-selected={authMode === mode}
                     onClick={() => switchAuthMode(mode)}
-                    className={`h-10 rounded-lg transition-all duration-150 cursor-pointer ${
-                      authMode === mode
-                        ? 'bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(15,23,42,0.1)]'
-                        : 'text-slate-500 hover:text-[#0F172A]'
-                    }`}
+                    className={`relative z-10 h-10 rounded-lg transition-colors duration-300 cursor-pointer ${
+                      authMode === mode ? 'text-[#0F172A]' : 'text-slate-500 hover:text-[#0F172A]'
+                    }`} /* changes done by vb */
                   >
                     {mode === 'login' ? 'Sign in' : 'Create account'}
                   </button>
@@ -571,15 +615,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
 
               {/* Heading — changes done by vb: Sora display font (no entrance animation; only the background animates) */}
-              <div className="mb-6">
-                <h1 className="auth-display text-[30px] font-bold leading-tight text-[#0B1736]">
-                  {isSignup ? 'Create your account' : 'Welcome back'}
-                </h1>
-                <p className="mt-1.5 text-sm text-[#64748B]">
-                  {isSignup
-                    ? 'Set up your PseudoTeam workspace in under a minute.'
-                    : 'Sign in to continue to your PseudoTeam workspace.'}
-                </p>
+              <div className="mb-6 grid [@media(max-height:820px)]:mb-4"> {/* changes done by vb */}
+                {([
+                  ['login', 'Welcome back', 'Sign in to continue to your PseudoTeam workspace.'],
+                  ['signup', 'Create your account', 'Set up your PseudoTeam workspace in under a minute.'],
+                ] as const).map(([mode, title, sub]) => {
+                  const active = (mode === 'signup') === isSignup;
+                  return (
+                    <div
+                      key={mode}
+                      aria-hidden={!active}
+                      className={`[grid-area:1/1] transition-all duration-300 ease-out ${
+                        active ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-1 opacity-0'
+                      }`}
+                    >
+                      {active ? (
+                        <h1 className="auth-display text-[30px] font-bold leading-tight text-[#0B1736] [@media(max-height:820px)]:text-[26px]">{title}</h1>
+                      ) : (
+                        <div className="auth-display text-[30px] font-bold leading-tight text-[#0B1736] [@media(max-height:820px)]:text-[26px]">{title}</div>
+                      )}
+                      <p className="mt-1.5 text-sm text-[#64748B]">{sub}</p>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Error / info */}
@@ -603,9 +661,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
               )}
 
-              {isSignup ? (
-                /* ---------------- SIGN-UP FORM ---------------- */
-                <form id="signup-form" onSubmit={handleSignup} className="space-y-4" noValidate={false}>
+              {/* changes done by vb */}
+              <div className="grid">
+                <form
+                  id="signup-form"
+                  onSubmit={handleSignup}
+                  className={`space-y-4 [@media(max-height:820px)]:space-y-3 [grid-area:1/1] transition-all duration-300 ease-out ${isSignup ? 'visible translate-y-0 opacity-100 delay-75' : 'invisible translate-y-2 opacity-0'}`}
+                  aria-hidden={!isSignup}
+                  inert={!isSignup}
+                  noValidate={false}
+                > {/* changes done by vb */}
                   <AuthField
                     id="signup-name"
                     label="Full name"
@@ -677,9 +742,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </button>
                 </form>
-              ) : (
-                /* ---------------- SIGN-IN FORM ---------------- */
-                <form id="login-form" onSubmit={handleSubmit} className="space-y-4">
+                <form
+                  id="login-form"
+                  onSubmit={handleSubmit}
+                  className={`space-y-4 [@media(max-height:820px)]:space-y-3 [grid-area:1/1] transition-all duration-300 ease-out ${isSignup ? 'invisible translate-y-2 opacity-0' : 'visible translate-y-0 opacity-100 delay-75'}`}
+                  aria-hidden={isSignup}
+                  inert={isSignup}
+                > {/* changes done by vb */}
                   <AuthField
                     id="login-email"
                     label="Work email"
@@ -733,11 +802,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </button>
                 </form>
-              )}
+              </div>
 
-              <p className="mt-8 text-center text-xs text-slate-400">
+              <p className="mt-8 text-center text-xs text-slate-400 [@media(max-height:820px)]:mt-4"> {/* changes done by vb */}
                 By continuing you agree to PseudoTeam’s terms of service.
               </p>
+            </div>
             </div>
           </main>
         </div>
