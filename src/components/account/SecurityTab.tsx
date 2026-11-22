@@ -3,10 +3,8 @@ import {
   Lock, 
   Eye, 
   EyeOff, 
-  CheckCircle2, 
-  Smartphone, 
-  Globe 
-} from 'lucide-react';
+  CheckCircle2
+} from 'lucide-react'; // changes done by vb
 
 interface SecurityTabProps {
   currentPassword: string;
@@ -196,44 +194,7 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
             )}
           </div>
 
-          {/* Two Balanced Cards: Two-Factor Authentication & Active Session with generous internal padding (24px) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1">
-            {/* 2FA Card */}
-            <div className="p-5 sm:p-6 rounded-xl bg-slate-50/60 border border-slate-200/70 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5 font-bold text-xs sm:text-sm text-slate-900">
-                  <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
-                    <Smartphone className="w-4 h-4" />
-                  </div>
-                  <span>Two-Factor Authentication</span>
-                </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200/60">
-                  Enabled
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 leading-relaxed pt-1">
-                Authenticator app verification active. Multi-factor challenge required on newly recognized browsers or external IP logins.
-              </p>
-            </div>
-
-            {/* Active Session Card */}
-            <div className="p-5 sm:p-6 rounded-xl bg-slate-50/60 border border-slate-200/70 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5 font-bold text-xs sm:text-sm text-slate-900">
-                  <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
-                    <Globe className="w-4 h-4" />
-                  </div>
-                  <span>Active Session</span>
-                </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200/60">
-                  Current Session
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 leading-relaxed pt-1">
-                Chrome on macOS · Delhi NCR, India. Last authenticated 12 minutes ago with active TLS 1.3 token encryption.
-              </p>
-            </div>
-          </div>
+          {/* changes done by vb */}
         </div>
 
         {/* Action Bar - Pinned to bottom right with clear separator */}

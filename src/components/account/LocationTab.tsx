@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MapPin, Check } from 'lucide-react';
+import { Check } from 'lucide-react'; // changes done by vb
 
 interface LocationTabProps {
   country: string;
@@ -134,18 +134,7 @@ export const LocationTab: React.FC<LocationTabProps> = ({
             </div>
           </div>
 
-          {/* Logistics Information */}
-          <div className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-100 flex items-start gap-2 text-xs text-blue-900 shrink-0">
-            <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-            <div className="leading-snug text-[11px]">
-              <span className="font-semibold">
-                Logistics and Spare Parts Dispatch Hub:
-              </span>
-              <span className="text-blue-800 ml-1">
-                Your registered delivery destination defaults to this address for express critical spare orders and automated dispatch routing.
-              </span>
-            </div>
-          </div>
+          {/* changes done by vb */}
         </div>
 
         {/* Action Bar */}

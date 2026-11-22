@@ -443,9 +443,7 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
     }
   ];
 
-  const fullName = `${firstName} ${lastName}`.trim();
-
-  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  // changes done by vb
 
   // ==================================================
   // RENDER
@@ -495,40 +493,7 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
             </div>
           </div>
 
-          {/* Dynamic Profile Summary */}
-          <div
-            id="account-header-profile-summary"
-            className="flex items-center gap-2.5 bg-slate-50 border border-slate-200/80 rounded-xl px-2.5 py-1 shadow-2xs"
-          >
-            <div className="relative">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={fullName || 'Customer'}
-                  referrerPolicy="no-referrer"
-                  className="w-7 h-7 rounded-full object-cover border border-slate-200 shadow-2xs"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-700 to-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shadow-2xs">
-                  {initials || 'C'}
-                </div>
-              )}
-
-              <span className="absolute bottom-0 right-0 w-2 h-2 bg-emerald-500 rounded-full border border-white" />
-            </div>
-
-            <div className="text-left hidden sm:block">
-              <div className="text-xs font-semibold text-slate-900 leading-tight">
-                {fullName || 'Customer'}
-              </div>
-
-              <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                <span>Customer Account</span>
-                <span className="inline-block w-1 h-1 rounded-full bg-slate-300" />
-                <span className="text-emerald-600 font-medium">Active</span>
-              </div>
-            </div>
-          </div>
+          {/* changes done by vb */}
         </div>
       </div>
 

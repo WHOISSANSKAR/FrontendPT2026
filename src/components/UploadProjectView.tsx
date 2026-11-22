@@ -467,12 +467,7 @@ export const UploadProjectView: React.FC<UploadProjectViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Governance Note */}
-                  <div className="flex items-center p-3.5 rounded-lg bg-slate-50/80 border border-slate-200/80 text-xs sm:text-[13px] text-slate-600">
-                    <p>
-                      <span className="font-semibold text-slate-800">Governance note:</span> A unique Project ID (<code className="font-mono text-blue-700">Pseudo-YYYY-MMDDHHMMSS</code>) is generated automatically upon submission, and classification determines SLA escalation chains.
-                    </p>
-                  </div>
+                  {/* changes done by vb */}
 
                 </div>
               </div>
@@ -610,11 +605,7 @@ export const UploadProjectView: React.FC<UploadProjectViewProps> = ({
                       </select>
                     </div>
 
-                    <div className="flex items-center p-3.5 rounded-lg bg-slate-50/80 border border-slate-200/80 text-xs sm:text-[13px] text-slate-600">
-                      <p>
-                        <span className="font-semibold text-slate-800">Milestone cadence:</span> Project funds will be earmarked according to selected interval schedule with phase-gated verification signoffs.
-                      </p>
-                    </div>
+                    {/* changes done by vb */}
                   </div>
 
                 </div>
@@ -761,11 +752,7 @@ export const UploadProjectView: React.FC<UploadProjectViewProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center p-3.5 rounded-lg bg-slate-50/80 border border-slate-200/80 text-xs sm:text-[13px] text-slate-600">
-                      <p>
-                        <span className="font-semibold text-slate-800">Dispatch protocol:</span> Primary phone number is utilized for mission-critical automated SMS alerting and emergency dispatch verification.
-                      </p>
-                    </div>
+                    {/* changes done by vb */}
                   </div>
 
                 </div>
