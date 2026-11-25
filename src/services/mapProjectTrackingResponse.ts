@@ -14,12 +14,10 @@ import {
   TrackingTask,
 } from "./projectTracking.service";
 
-// Convert IDs to strings because the frontend uses string IDs.
 const toId = (value: number | string | null | undefined): string => {
   return value == null ? "" : String(value);
 };
 
-// Normalize YYYY-MM-DD or dd-mm-YYYY into YYYY-MM-DD
 const toIsoDateOnly = (value: string | null | undefined): string | undefined => {
   if (!value) return undefined;
   const trimmed = String(value).trim();
@@ -34,7 +32,6 @@ const toIsoDateOnly = (value: string | null | undefined): string | undefined => 
   return undefined;
 };
 
-// Format backend dates for the existing UI.
 const formatDate = (value: string | null | undefined): string => {
   if (!value) return "—";
 
@@ -52,7 +49,6 @@ const formatDate = (value: string | null | undefined): string => {
   }).format(date);
 };
 
-// Format the project budget using the currency returned by FastAPI.
 const formatBudget = (
   amount: number | null | undefined,
   currency: string | null | undefined
@@ -74,7 +70,6 @@ const formatBudget = (
   }
 };
 
-// Convert one project from the summary endpoint.
 export const mapTrackingProjectSummary = (
   item: TrackingProjectSummary
 ): ProjectItem => {
@@ -110,7 +105,6 @@ export const mapTrackingProjectSummary = (
   };
 };
 
-// Convert backend task status into the status values expected by the frontend.
 const mapTaskStatus = (
   status: string | null | undefined
 ): MilestoneTask["status"] => {
@@ -137,26 +131,54 @@ const mapTaskStatus = (
   }
 };
 
-// Map one backend task into the existing frontend MilestoneTask structure.
+type ExtendedTrackingTask = TrackingTask & {
+  service_provider_status?: string | null;
+  proof_completion_approved?: boolean;
+  has_poc_blob?: boolean;
+  poc_available?: boolean;
+  poc_approved?: boolean;
+  poc_url?: string | null;
+  poc_file_url?: string | null;
+  poc_file_name?: string | null;
+  poc_notes?: string | null;
+  can_view_poc?: boolean;
+};
+
 const mapTrackingTask = (
-  task: TrackingTask,
+  task: ExtendedTrackingTask,
   index: number
 ): MilestoneTask => {
+  const effectiveStatus =
+    ["fulfilled", "fullfilled", "completed"].includes(
+      String(task.service_provider_status || "").trim().toLowerCase()
+    )
+      ? task.service_provider_status
+      : task.status;
+
   return {
     id: toId(task.id),
     name: task.title || "Untitled Task",
     taskNumber: `TASK ${String(index + 1).padStart(2, "0")}`,
     description: task.description || "",
-    status: mapTaskStatus(task.status),
+    status: mapTaskStatus(effectiveStatus),
     weightage: Number(task.weightage || 0),
     progress: Number(task.progress || 0),
     startDate: toIsoDateOnly(task.start_date) || formatDate(task.start_date),
     endDate: toIsoDateOnly(task.end_date) || formatDate(task.end_date),
     activities: [],
-  };
+    service_provider_status: task.service_provider_status ?? null,
+    proof_completion_approved: task.proof_completion_approved,
+    has_poc_blob: task.has_poc_blob,
+    poc_available: task.poc_available,
+    poc_approved: task.poc_approved,
+    poc_url: task.poc_url ?? null,
+    poc_file_url: task.poc_file_url ?? null,
+    poc_file_name: task.poc_file_name ?? null,
+    poc_notes: task.poc_notes ?? null,
+    can_view_poc: task.can_view_poc,
+  } as MilestoneTask;
 };
 
-// Map one milestone and its tasks.
 const mapTrackingMilestone = (
   milestone: TrackingMilestone
 ): LocationMilestone => {
@@ -176,7 +198,6 @@ const mapTrackingMilestone = (
   };
 };
 
-// Map one location and its milestones.
 const mapTrackingLocation = (
   location: TrackingLocation
 ): ProjectLocation => {
@@ -190,32 +211,24 @@ const mapTrackingLocation = (
         String(milestone.status).toLowerCase() === "in progress"
     ) || milestones[0];
 
-  const mappedLocation: ProjectLocation = {
+  return {
     id: toId(location.id),
-
     country: location.country || "—",
     countryCode: "",
     state: location.state || "—",
     city: location.city || "—",
-
     phase: currentMilestone?.name || "Not Started",
     status: (location.status || "Pending") as ProjectLocation["status"],
     progress: Number(location.progress || 0),
-
     startDate: toIsoDateOnly(location.start_date),
     endDate: toIsoDateOnly(location.end_date),
-
     assignedTeam: "—",
     lastUpdated: formatDate(location.updated_at || location.created_at),
-
     milestones,
     comments: [],
   };
-
-  return mappedLocation;
 };
 
-// Map the detailed project response into the frontend ProjectItem.
 export const mapProjectTrackingDetail = (
   response: TrackingProjectDetailResponse
 ): ProjectItem => {
@@ -235,47 +248,32 @@ export const mapProjectTrackingDetail = (
     project.final_budget ??
     null;
 
-  const mappedProject: ProjectItem = {
+  return {
     id: toId(project.project_id),
     code: project.project_code || toId(project.project_id),
     name: project.project_name || "Untitled Project",
-
     customer: project.customer_name || "—",
     category: project.category || project.project_type || "—",
-
     status: (
       project.project_status ||
       project.status ||
       "Not Started"
     ) as ProjectStatus,
-
     progress: Number(response.overall_progress || 0),
     currentPhase: response.current_phase || "Not Started",
-
     velocity: "—",
     manager: project.project_manager_id
       ? String(project.project_manager_id)
       : "—",
-
     startDate: formatDate(project.start_date),
     expectedCompletion: formatDate(project.end_date),
     budget: formatBudget(project.budget, project.currency),
     finalBudget: formatBudget(rawFinalBudget, project.currency),
     lastUpdated: formatDate(response.last_updated),
-
     milestonesCount: Number(response.total_milestones || 0),
-    completedMilestones: Number(
-      response.completed_milestones || 0
-    ),
-
-    locationsCount: Number(
-      response.total_locations ?? locations.length
-    ),
-
+    completedMilestones: Number(response.completed_milestones || 0),
+    locationsCount: Number(response.total_locations ?? locations.length),
     countriesCount: Number(response.total_countries || 0),
-
     locations,
   };
-
-  return mappedProject;
 };

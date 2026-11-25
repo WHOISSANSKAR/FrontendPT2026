@@ -110,6 +110,8 @@ const getTaskPocMeta = (task: MilestoneTask) => {
     poc_approved?: boolean;
     proofCompletionApproved?: boolean;
     proof_completion_approved?: boolean;
+    canViewPoc?: boolean;
+    can_view_poc?: boolean;
     pocApprovedAt?: string;
     poc_approved_at?: string;
     proofOfCompletion?: {
@@ -152,7 +154,10 @@ const getTaskPocMeta = (task: MilestoneTask) => {
   );
 
   const fulfilled = isTaskFulfilled(task);
-  const canViewPoc = fulfilled && isAvailable && isApproved;
+  const canViewPoc =
+    rawTask.can_view_poc ??
+    rawTask.canViewPoc ??
+    (fulfilled && isAvailable && isApproved);
 
   const fileName =
     rawTask.proofOfCompletion?.fileName ||
@@ -182,7 +187,7 @@ const getTaskPocMeta = (task: MilestoneTask) => {
   }
 
   return {
-    canViewPoc,
+    canViewPoc: Boolean(canViewPoc),
     url: String(url || '').trim(),
     fileName,
     notes,
@@ -352,7 +357,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     setLoadingPocTaskId(task.id);
 
     const endpointUrl =
-      pocMeta.url || `/api/projects/${project.id}/tasks/${task.id}/poc`;
+      pocMeta.url || `/api/v1/customer/projects/${project.id}/tasks/${task.id}/poc`;
 
     try {
       const response = await fetch(endpointUrl, {
@@ -929,7 +934,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
 
       {/* 6. Stable Two-Column Grid: LEFT (Task Timeline) + RIGHT (Milestone Information) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3 lg:overflow-hidden">
-        {/* LEFT COLUMN: Task Timeline (8 cols) */}
         <div
           id="milestone-tasks-timeline-card"
           className="col-span-1 lg:col-span-8 min-w-0 min-h-[280px] lg:min-h-0 h-full bg-white rounded-xl border border-slate-200/90 flex flex-col overflow-hidden shadow-2xs"
@@ -1178,7 +1182,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Milestone Information Panel (4 cols) */}
         <div
           id="milestone-information-card"
           className="col-span-1 lg:col-span-4 min-w-0 min-h-[280px] lg:min-h-0 h-full bg-white rounded-xl border border-slate-200/90 flex flex-col overflow-hidden shadow-2xs"
