@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react'; // changes done by vb
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   Mail,
   Lock,
@@ -11,15 +11,16 @@ import {
   ChevronDown,
   Upload,
   Check,
-  User // changes done by vb: icon for the sign-up name field
+  User,
+  Phone,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LightEnterpriseBackground } from './auth/LightEnterpriseBackground';
-import { customerLogin, customerRegister } from '../services/authService'; // changes done by vb: + customerRegister
-import { AuthLoader } from './auth/AuthLoader'; // changes done by vb
-import { AuthBackdrop } from './auth/AuthBackdrop'; // changes done by vb
-import { LANDING_URL } from '../config/links'; // changes done by vb
-import { PhoneConversation } from './auth/PhoneConversation'; // changes done by vb
+import { customerLogin, customerRegister } from '../services/authService';
+import { AuthLoader } from './auth/AuthLoader';
+import { AuthBackdrop } from './auth/AuthBackdrop';
+import { LANDING_URL } from '../config/links';
+import { PhoneConversation } from './auth/PhoneConversation';
 
 export interface UserProfileData {
   country?: string;
@@ -33,10 +34,6 @@ export interface UserProfileData {
   gstNumber?: string;
   idFileName?: string;
 }
-
-// interface LoginPageProps {
-//   onLoginSuccess: (username?: string, profileData?: UserProfileData) => void;
-// }
 
 interface LoginPageProps {
   onLoginSuccess: (
@@ -60,19 +57,18 @@ const COUNTRIES = [
 ];
 
 const CITIES_BY_COUNTRY: Record<string, string[]> = {
-  'India': ['New Delhi', 'Mumbai', 'Bengaluru', 'Hyderabad', 'Pune', 'Chennai', 'Kolkata', 'Ahmedabad', 'Gurugram', 'Noida', 'Chandigarh'],
+  India: ['New Delhi', 'Mumbai', 'Bengaluru', 'Hyderabad', 'Pune', 'Chennai', 'Kolkata', 'Ahmedabad', 'Gurugram', 'Noida', 'Chandigarh'],
   'United States': ['New York', 'San Francisco', 'Seattle', 'Chicago', 'Austin', 'Los Angeles', 'Boston', 'Denver', 'Columbus'],
   'United Kingdom': ['London', 'Manchester', 'Birmingham', 'Edinburgh', 'Bristol', 'Cambridge'],
-  'Germany': ['Munich', 'Frankfurt', 'Berlin', 'Hamburg', 'Stuttgart', 'Cologne'],
+  Germany: ['Munich', 'Frankfurt', 'Berlin', 'Hamburg', 'Stuttgart', 'Cologne'],
   'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah'],
-  'Singapore': ['Singapore City', 'Jurong', 'Changi'],
-  'Australia': ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide'],
-  'Canada': ['Toronto', 'Vancouver', 'Montreal', 'Ottawa', 'Calgary'],
-  'Japan': ['Tokyo', 'Osaka', 'Kyoto', 'Yokohama', 'Nagoya'],
-  'France': ['Paris', 'Lyon', 'Marseille', 'Toulouse', 'Nice'],
+  Singapore: ['Singapore City', 'Jurong', 'Changi'],
+  Australia: ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide'],
+  Canada: ['Toronto', 'Vancouver', 'Montreal', 'Ottawa', 'Calgary'],
+  Japan: ['Tokyo', 'Osaka', 'Kyoto', 'Yokohama', 'Nagoya'],
+  France: ['Paris', 'Lyon', 'Marseille', 'Toulouse', 'Nice'],
 };
 
-// changes done by vb: shared input row used by the redesigned sign-in and sign-up forms
 interface AuthFieldProps {
   id: string;
   label: string;
@@ -86,24 +82,40 @@ interface AuthFieldProps {
   labelAside?: React.ReactNode;
   hint?: React.ReactNode;
   minLength?: number;
+  maxLength?: number;
+  pattern?: string;
 }
 
 const AuthField: React.FC<AuthFieldProps> = ({
-  id, label, icon: Icon, type, value, onChange, placeholder, autoComplete, trailing, labelAside, hint, minLength,
+  id,
+  label,
+  icon: Icon,
+  type,
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+  trailing,
+  labelAside,
+  hint,
+  minLength,
+  maxLength,
+  pattern,
 }) => (
-  // changes done by vb: no entrance animation (only the background animates)
   <div>
     <div className="mb-1.5 flex items-center justify-between">
       <label htmlFor={id} className="text-[13px] font-semibold text-[#0F172A]">{label}</label>
       {labelAside}
     </div>
-    <div className="group flex h-12 [@media(max-height:820px)]:h-11 items-center gap-2.5 rounded-xl border border-white/70 bg-white/45 px-3.5 backdrop-blur-md transition-all duration-150 hover:border-white focus-within:border-[#2563EB] focus-within:bg-white/80 focus-within:ring-4 focus-within:ring-blue-500/10" /* changes done by vb */>
+    <div className="group flex h-12 [@media(max-height:820px)]:h-11 items-center gap-2.5 rounded-xl border border-white/70 bg-white/45 px-3.5 backdrop-blur-md transition-all duration-150 hover:border-white focus-within:border-[#2563EB] focus-within:bg-white/80 focus-within:ring-4 focus-within:ring-blue-500/10">
       <Icon className="h-[18px] w-[18px] shrink-0 text-slate-400 transition-colors group-focus-within:text-[#2563EB]" />
       <input
         id={id}
         type={type}
         required
         minLength={minLength}
+        maxLength={maxLength}
+        pattern={pattern}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -116,36 +128,19 @@ const AuthField: React.FC<AuthFieldProps> = ({
   </div>
 );
 
-// changes done by vb: simple password strength score for the sign-up form (0–4)
-const passwordStrength = (pw: string) => {
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
-  if (/\d/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  return score;
-};
-
-const STRENGTH_LABELS = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'];
-const STRENGTH_COLORS = ['bg-slate-200', 'bg-rose-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500'];
-
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
-  // Pre-filled credentials as specified
   const [email, setEmail] = useState('vb@gmail.com');
   const [password, setPassword] = useState('Password');
   const [showPassword, setShowPassword] = useState(false);
-  // changes done by vb: removed "Remember me" state (checkbox removed from the UI)
   const [errorMessage, setErrorMessage] = useState('');
   const [infoNotice, setInfoNotice] = useState<string | null>(null);
 
-  // changes done by vb: sign-in vs sign-up mode (synced with /login and /signup)
   const [authMode, setAuthMode] = useState<'login' | 'signup'>(() =>
     typeof window !== 'undefined' && window.location.pathname === '/signup' ? 'signup' : 'login'
   );
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [signupContact, setSignupContact] = useState('');
   const [isNewUser, setIsNewUser] = useState(false);
 
   const switchAuthMode = (mode: 'login' | 'signup') => {
@@ -154,16 +149,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setInfoNotice(null);
   };
 
-  // Restore phase from URL query parameters (step=1 or step=2) on refresh
   const initialStepParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('step') : null;
   const initialPhase = (initialStepParam === '1' || initialStepParam === '2') ? 'onboarding' : 'form';
   const initialStep = initialStepParam === '2' ? 2 : 1;
 
-  // Transition phases:
-  // 1. 'form' -> 'form-fading-out'
-  // 2. 'welcome' -> 'welcome-fading-out'
-  // 3. 'onboarding' (Step 1 -> Step 2)
-  // 4. 'onboarding-fading-out' -> onLoginSuccess()
   const [phase, setPhase] = useState<
     'form' | 'form-fading-out' | 'welcome' | 'welcome-fading-out' | 'onboarding' | 'onboarding-fading-out'
   >(initialPhase);
@@ -171,18 +160,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [welcomeVisible, setWelcomeVisible] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
-  // Onboarding state
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(initialStep);
   const [slideDirection, setSlideDirection] = useState<1 | -1>(1);
 
-  // Synchronize onboarding step with URL so browser refresh preserves Step 1 / Step 2
   useEffect(() => {
     if (phase === 'onboarding') {
       try {
         window.history.replaceState(null, '', `/login?step=${onboardingStep}`);
       } catch { }
     } else if (phase === 'form') {
-      // changes done by vb: keep the URL in step with the sign-in / sign-up mode
       try {
         const target = authMode === 'signup' ? '/signup' : '/login';
         if (window.location.pathname !== target || window.location.search) {
@@ -192,13 +178,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   }, [phase, onboardingStep, authMode]);
 
-  // Profile Step 1 fields
   const [country, setCountry] = useState('');
   const [city, setCity] = useState('');
   const [pincode, setPincode] = useState('');
   const [mailingAddress, setMailingAddress] = useState('');
 
-  // Profile Step 2 fields
   const [entityType, setEntityType] = useState<'Organization' | 'Individual'>('Organization');
   const [organizationName, setOrganizationName] = useState('');
   const [aboutWork, setAboutWork] = useState('');
@@ -206,158 +190,88 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [gstNumber, setGstNumber] = useState('');
   const [idFileName, setIdFileName] = useState('');
 
-  // const authenticatedUser = 'Vaniya Batra';
   const [authenticatedUser, setAuthenticatedUser] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // const startLoginSequence = () => {
-  //   setErrorMessage('');
-  //   setInfoNotice(null);
-
-  //   // 1. Smoothly fade out form
-  //   setPhase('form-fading-out');
-
-  //   setTimeout(() => {
-  //     // 2. Mount minimal centered welcome/loading view
-  //     setPhase('welcome');
-  //     setProgressPercent(0);
-
-  //     requestAnimationFrame(() => {
-  //       setWelcomeVisible(true);
-  //     });
-
-  //     // Animate progress smoothly from 0% to 100% over 2000ms
-  //     const duration = 2000;
-  //     const startTime = performance.now();
-
-  //     const animateProgress = (currentTime: number) => {
-  //       const elapsed = currentTime - startTime;
-  //       const progress = Math.min(100, (elapsed / duration) * 100);
-  //       // Smooth sine easing
-  //       const eased = 100 * Math.sin((progress / 100) * (Math.PI / 2));
-  //       setProgressPercent(Math.min(100, Math.max(eased, progress)));
-
-  //       if (elapsed < duration) {
-  //         requestAnimationFrame(animateProgress);
-  //       } else {
-  //         // Progress complete: brief pause then transition smoothly to Profile Completion Step 1
-  //         setTimeout(() => {
-  //           setWelcomeVisible(false);
-  //           setPhase('welcome-fading-out');
-
-  //           setTimeout(() => {
-  //             setPhase('onboarding');
-  //             setOnboardingStep(1);
-  //           }, 300);
-  //         }, 180);
-  //       }
-  //     };
-
-  //     requestAnimationFrame(animateProgress);
-  //   }, 300);
-  // };
-
   const startLoginSequence = (
-  userName: string,
-  redirectTo: string
-) => {
-  setErrorMessage('');
-  setInfoNotice(null);
+    userName: string,
+    redirectTo: string
+  ) => {
+    setErrorMessage('');
+    setInfoNotice(null);
 
-  setPhase('form-fading-out');
+    setPhase('form-fading-out');
 
-  setTimeout(() => {
-    setPhase('welcome');
-    setProgressPercent(0);
+    setTimeout(() => {
+      setPhase('welcome');
+      setProgressPercent(0);
 
-    requestAnimationFrame(() => {
-      setWelcomeVisible(true);
-    });
+      requestAnimationFrame(() => {
+        setWelcomeVisible(true);
+      });
 
-    const duration = 2000;
-    const startTime = performance.now();
+      const duration = 2000;
+      const startTime = performance.now();
 
-    const animateProgress = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(100, (elapsed / duration) * 100);
+      const animateProgress = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(100, (elapsed / duration) * 100);
 
-      const eased = 100 * Math.sin((progress / 100) * (Math.PI / 2));
+        const eased = 100 * Math.sin((progress / 100) * (Math.PI / 2));
 
-      setProgressPercent(Math.min(100, Math.max(eased, progress)));
+        setProgressPercent(Math.min(100, Math.max(eased, progress)));
 
-      if (elapsed < duration) {
-        requestAnimationFrame(animateProgress);
-      } else {
-        setTimeout(() => {
-          setWelcomeVisible(false);
-          setPhase('welcome-fading-out');
-
+        if (elapsed < duration) {
+          requestAnimationFrame(animateProgress);
+        } else {
           setTimeout(() => {
-            onLoginSuccess(userName, undefined, redirectTo);
-          }, 300);
-        }, 180);
-      }
-    };
+            setWelcomeVisible(false);
+            setPhase('welcome-fading-out');
 
-    requestAnimationFrame(animateProgress);
-  }, 300);
-};
+            setTimeout(() => {
+              onLoginSuccess(userName, undefined, redirectTo);
+            }, 300);
+          }, 180);
+        }
+      };
 
-  // const handleSubmit = (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setErrorMessage('');
-  //   setInfoNotice(null);
-
-  //   const trimmedEmail = email.trim();
-  //   if (trimmedEmail.toLowerCase() === 'vb@gmail.com' && password === 'Password') {
-  //     startLoginSequence();
-  //   } else {
-  //     setErrorMessage('Invalid work email or password. Please verify your credentials.');
-  //   }
-  // };
+      requestAnimationFrame(animateProgress);
+    }, 300);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (isSubmitting) return;
+    if (isSubmitting) return;
 
-  setErrorMessage('');
-  setInfoNotice(null);
-  setIsSubmitting(true);
+    setErrorMessage('');
+    setInfoNotice(null);
+    setIsSubmitting(true);
 
-  try {
-    const response = await customerLogin({
-      email: email.trim(),
-      password: password,
-    });
+    try {
+      const response = await customerLogin({
+        email: email.trim(),
+        password: password,
+      });
 
-    // Save JWT token for authenticated API requests
-    localStorage.setItem('auth_token', response.access_token);
+      localStorage.setItem('auth_token', response.access_token);
+      setAuthenticatedUser(response.user.name);
 
-    // Set actual username returned by FastAPI
-    setAuthenticatedUser(response.user.name);
+      startLoginSequence(
+        response.user.name,
+        response.redirect_to
+      );
+    } catch (error: any) {
+      console.error('Login error:', error);
 
-    // Start welcome animation and navigate afterwards
-    startLoginSequence(
-      response.user.name,
-      response.redirect_to
-    );
-
-  } catch (error: any) {
-    console.error('Login error:', error);
-
-    setErrorMessage(
-      error.response?.data?.detail ||
-      'Unable to login. Please check your credentials.'
-    );
-
-  } finally {
-    setIsSubmitting(false);
-  }
-};
-
-  // changes done by vb: removed handleContinueWithEmail and handleRequestAccess
-  // (the "Continue with Email" button and "Request access" link were removed)
+      setErrorMessage(
+        error.response?.data?.detail ||
+        'Unable to login. Please check your credentials.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleForgotPassword = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -365,7 +279,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setErrorMessage('');
   };
 
-  // changes done by vb: sign-up submit (name, email, password)
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -374,45 +287,55 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setInfoNotice(null);
 
     const name = signupName.trim();
-    const mail = signupEmail.trim();
+    const mail = signupEmail.trim().toLowerCase();
+    const contact = signupContact.trim();
 
     if (name.length < 2) {
       setErrorMessage('Please enter your full name.');
       return;
     }
-    if (signupPassword.length < 8) {
-      setErrorMessage('Password must be at least 8 characters.');
+    if (!/^\+?[0-9]{10,15}$/.test(contact)) {
+      setErrorMessage('Please enter a valid contact number (10 to 15 digits).');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await customerRegister({ name, email: mail, password: signupPassword });
+      const response = await customerRegister({ name, email: mail, contact });
 
       if (response.access_token) {
-        // Backend signed the new user straight in
         localStorage.setItem('auth_token', response.access_token);
         const displayName = response.user?.name || name;
         setAuthenticatedUser(displayName);
         setIsNewUser(true);
         startLoginSequence(displayName, response.redirect_to || '/dashboard');
       } else {
-        // Account created; ask them to sign in
         setEmail(mail);
         setPassword('');
-        setSignupPassword('');
+        setSignupName('');
+        setSignupEmail('');
+        setSignupContact('');
         setAuthMode('login');
-        setInfoNotice(response.message || 'Account created. Sign in to continue.');
+        setInfoNotice(
+          response.message ||
+          'Signup successful! Check your email for verification link.'
+        );
       }
     } catch (error: any) {
-      const status = error?.response?.status;
-      if (status === 404 || status === 405) {
+      const statusCode = error?.response?.status;
+      if (statusCode === 404 || statusCode === 405) {
         console.warn('Sign-up endpoint POST /api/v1/auth/customer/register is not available on the backend yet.');
         setErrorMessage('Sign-up isn’t available yet. Please contact your PseudoTeam administrator.');
       } else {
         const detail = error?.response?.data?.detail;
         setErrorMessage(
-          typeof detail === 'string' ? detail : 'Unable to create your account. Please try again.'
+          typeof detail === 'string'
+            ? detail
+            : Array.isArray(detail)
+              ? detail.map((d: any) => d?.msg || String(d)).join(', ')
+              : typeof detail === 'object' && detail !== null
+                ? Object.values(detail).flat().join(', ')
+                : 'Unable to create your account. Please try again.'
         );
       }
     } finally {
@@ -420,13 +343,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  // Onboarding Step 1 -> Step 2 (Next)
   const handleNextToStep2 = () => {
     setSlideDirection(1);
     setOnboardingStep(2);
   };
 
-  // Onboarding Step 1 -> Skip (Immediate Dashboard entry)
   const handleSkip = () => {
     setPhase('onboarding-fading-out');
     setTimeout(() => {
@@ -434,13 +355,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }, 300);
   };
 
-  // Onboarding Step 2 -> Step 1 (Prev)
   const handlePrevToStep1 = () => {
     setSlideDirection(-1);
     setOnboardingStep(1);
   };
 
-  // Onboarding Step 2 -> Submit (Dashboard entry)
   const handleSubmitProfile = () => {
     setPhase('onboarding-fading-out');
     const profilePayload: UserProfileData = {
@@ -460,7 +379,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }, 300);
   };
 
-  // Dynamic available cities based on country selection
   const availableCities = country && CITIES_BY_COUNTRY[country]
     ? CITIES_BY_COUNTRY[country]
     : [
@@ -468,7 +386,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       'London', 'Munich', 'Dubai', 'Singapore', 'Sydney', 'Tokyo'
     ];
 
-  // changes done by vb
   const formAreaRef = useRef<HTMLElement>(null);
   const formCardRef = useRef<HTMLDivElement>(null);
   const [formFit, setFormFit] = useState(1);
@@ -493,11 +410,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     return () => ro.disconnect();
   }, [phase, authMode]);
 
-  // ===================================================================
-  // changes done by vb: REDESIGNED SIGN-IN / SIGN-UP + POST-LOGIN LOADER
-  // Split layout: brand panel (lg+) on the left, form on the right.
-  // The profile-completion onboarding below keeps its original card.
-  // ===================================================================
   const isFormPhase = phase === 'form' || phase === 'form-fading-out';
   const isLoaderPhase = phase === 'welcome' || phase === 'welcome-fading-out';
 
@@ -507,7 +419,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         id="pseudoteam-login-screen"
         className="auth-font fixed inset-0 flex min-h-screen w-full items-center justify-center overflow-y-auto p-6"
       >
-        {/* changes done by vb: animated background + new font on the loader */}
         <AuthBackdrop />
         <AuthLoader
           userName={authenticatedUser}
@@ -520,301 +431,260 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   }
 
   if (isFormPhase) {
-    const strength = passwordStrength(signupPassword);
     const isSignup = authMode === 'signup';
 
     return (
       <div
         id="pseudoteam-login-screen"
-        className="auth-font fixed inset-0 h-dvh w-full overflow-hidden text-[#0F172A]" /* changes done by vb */
+        className="auth-font fixed inset-0 h-dvh w-full overflow-hidden text-[#0F172A]"
       >
-        {/* changes done by vb: animated background + new font (DM Sans body / Sora headings) */}
         <AuthBackdrop />
-        {/* changes done by vb */}
         <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
           <div className="absolute left-1/2 top-1/2 h-[260px] w-[260px] -translate-x-[70%] -translate-y-[60%] rounded-full bg-gradient-to-br from-sky-400/45 to-blue-600/40 blur-3xl sm:h-[420px] sm:w-[420px] lg:left-3/4" />
           <div className="absolute left-1/2 top-1/2 h-[240px] w-[240px] -translate-x-[30%] -translate-y-[5%] rounded-full bg-gradient-to-br from-indigo-400/40 to-fuchsia-400/30 blur-3xl sm:h-[360px] sm:w-[360px] sm:-translate-x-[10%] lg:left-3/4" />
         </div>
 
-        {/* changes done by vb: "Back to home" sits in the top-left corner of the page (outside the card) */}
         <a
           id="link-back-to-home"
           href={LANDING_URL}
-          className="group absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/80 bg-white/85 px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-[0_6px_18px_rgba(30,64,175,0.12)] backdrop-blur-md transition-colors hover:border-blue-300 hover:text-blue-700 sm:left-6 sm:top-6 sm:text-[13px] lg:left-auto lg:right-10" /* changes done by vb */
+          className="group absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/80 bg-white/85 px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-[0_6px_18px_rgba(30,64,175,0.12)] backdrop-blur-md transition-colors hover:border-blue-300 hover:text-blue-700 sm:left-6 sm:top-6 sm:text-[13px] lg:left-auto lg:right-10"
         >
           <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
           Back to home
         </a>
 
-        {/* changes done by vb */}
         <div className="relative z-10 mx-auto grid h-full w-full max-w-[1400px] grid-cols-1 items-center gap-6 px-3 pb-3 pt-14 sm:px-6 sm:pb-5 sm:pt-16 lg:grid-cols-2 lg:gap-10 lg:px-10">
           <section className="relative hidden h-full min-h-0 lg:block">
             <PhoneConversation />
           </section>
 
           <main ref={formAreaRef} className="relative flex h-full min-h-0 w-full items-center justify-center">
-            {/* changes done by vb */}
             <div
               className="relative flex w-full max-w-[440px] items-start justify-center"
               style={{ height: formFit < 1 ? formNaturalH * formFit : undefined }}
-            > {/* changes done by vb */}
-            <div
-              id="login-form-wrapper"
-              ref={formCardRef}
-              className="relative w-full max-w-[440px] overflow-hidden rounded-[28px] border border-white/60 bg-gradient-to-br from-white/50 via-white/25 to-white/10 p-6 shadow-[0_30px_70px_rgba(30,64,175,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-1px_0_rgba(255,255,255,0.25)] backdrop-blur-2xl backdrop-saturate-150 sm:p-9 [@media(max-height:820px)]:sm:p-7" /* changes done by vb */
-              style={{
-                opacity: phase === 'form-fading-out' ? 0 : 1,
-                transform: `scale(${formFit})${phase === 'form-fading-out' ? ' translateY(6px) scale(0.98)' : ''}`, // changes done by vb
-                transformOrigin: 'top center', // changes done by vb
-                transition: phase === 'form-fading-out' ? 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' : 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)', // changes done by vb
-                pointerEvents: phase === 'form-fading-out' ? 'none' : 'auto',
-              }}
             >
-              {/* Logo — changes done by vb: now shown on all screen sizes (brand panel removed) */}
-              <div className="mb-7 flex justify-center [@media(max-height:820px)]:mb-4"> {/* changes done by vb */}
-                {/* changes done by vb: new PseudoTeam logo (public/pseudoteam-logo.png) on a dark navy badge
-                    so its light text is readable on the white card */}
-                <span className="inline-flex items-center rounded-2xl bg-gradient-to-br from-[#0B1736] to-[#1E3A8A] px-3 py-1 shadow-[0_8px_20px_rgba(11,23,54,0.28)] ring-1 ring-white/10">
-                  <img
-                    id="pseudoteam-logo"
-                    src="/pseudoteam-logo.png"
-                    alt="PseudoTeam"
-                    className="h-12 w-auto max-w-[170px] object-contain select-none [@media(max-height:820px)]:h-10" /* changes done by vb */
-                    referrerPolicy="no-referrer"
-                  />
-                </span>
-              </div>
-
-              {/* Sign in / Create account switch */}
               <div
-                role="tablist"
-                aria-label="Choose sign in or create account"
-                className="relative mb-7 grid grid-cols-2 rounded-xl border border-white/50 bg-white/30 p-1 text-sm font-semibold backdrop-blur-md [@media(max-height:820px)]:mb-4" /* changes done by vb */
+                id="login-form-wrapper"
+                ref={formCardRef}
+                className="relative w-full max-w-[440px] overflow-hidden rounded-[28px] border border-white/60 bg-gradient-to-br from-white/50 via-white/25 to-white/10 p-6 shadow-[0_30px_70px_rgba(30,64,175,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-1px_0_rgba(255,255,255,0.25)] backdrop-blur-2xl backdrop-saturate-150 sm:p-9 [@media(max-height:820px)]:sm:p-7"
+                style={{
+                  opacity: phase === 'form-fading-out' ? 0 : 1,
+                  transform: `scale(${formFit})${phase === 'form-fading-out' ? ' translateY(6px) scale(0.98)' : ''}`,
+                  transformOrigin: 'top center',
+                  transition: phase === 'form-fading-out' ? 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' : 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)',
+                  pointerEvents: phase === 'form-fading-out' ? 'none' : 'auto',
+                }}
               >
-                {/* changes done by vb */}
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute bottom-1 left-1 top-1 w-[calc(50%-4px)] rounded-lg bg-white shadow-[0_1px_3px_rgba(15,23,42,0.1)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                  style={{ transform: isSignup ? 'translateX(100%)' : 'translateX(0)' }}
-                />
-                {(['login', 'signup'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    id={mode === 'login' ? 'auth-tab-login' : 'auth-tab-signup'}
-                    role="tab"
-                    type="button"
-                    aria-selected={authMode === mode}
-                    onClick={() => switchAuthMode(mode)}
-                    className={`relative z-10 h-10 rounded-lg transition-colors duration-300 cursor-pointer ${
-                      authMode === mode ? 'text-[#0F172A]' : 'text-slate-500 hover:text-[#0F172A]'
-                    }`} /* changes done by vb */
-                  >
-                    {mode === 'login' ? 'Sign in' : 'Create account'}
-                  </button>
-                ))}
-              </div>
+                <div className="mb-7 flex justify-center [@media(max-height:820px)]:mb-4">
+                  <span className="inline-flex items-center rounded-2xl bg-gradient-to-br from-[#0B1736] to-[#1E3A8A] px-3 py-1 shadow-[0_8px_20px_rgba(11,23,54,0.28)] ring-1 ring-white/10">
+                    <img
+                      id="pseudoteam-logo"
+                      src="/pseudoteam-logo.png"
+                      alt="PseudoTeam"
+                      className="h-12 w-auto max-w-[170px] object-contain select-none [@media(max-height:820px)]:h-10"
+                      referrerPolicy="no-referrer"
+                    />
+                  </span>
+                </div>
 
-              {/* Heading — changes done by vb: Sora display font (no entrance animation; only the background animates) */}
-              <div className="mb-6 grid [@media(max-height:820px)]:mb-4"> {/* changes done by vb */}
-                {([
-                  ['login', 'Welcome back', 'Sign in to continue to your PseudoTeam workspace.'],
-                  ['signup', 'Create your account', 'Set up your PseudoTeam workspace in under a minute.'],
-                ] as const).map(([mode, title, sub]) => {
-                  const active = (mode === 'signup') === isSignup;
-                  return (
-                    <div
+                <div
+                  role="tablist"
+                  aria-label="Choose sign in or create account"
+                  className="relative mb-7 grid grid-cols-2 rounded-xl border border-white/50 bg-white/30 p-1 text-sm font-semibold backdrop-blur-md [@media(max-height:820px)]:mb-4"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute bottom-1 left-1 top-1 w-[calc(50%-4px)] rounded-lg bg-white shadow-[0_1px_3px_rgba(15,23,42,0.1)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                    style={{ transform: isSignup ? 'translateX(100%)' : 'translateX(0)' }}
+                  />
+                  {(['login', 'signup'] as const).map((mode) => (
+                    <button
                       key={mode}
-                      aria-hidden={!active}
-                      className={`[grid-area:1/1] transition-all duration-300 ease-out ${
-                        active ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-1 opacity-0'
+                      id={mode === 'login' ? 'auth-tab-login' : 'auth-tab-signup'}
+                      role="tab"
+                      type="button"
+                      aria-selected={authMode === mode}
+                      onClick={() => switchAuthMode(mode)}
+                      className={`relative z-10 h-10 rounded-lg transition-colors duration-300 cursor-pointer ${
+                        authMode === mode ? 'text-[#0F172A]' : 'text-slate-500 hover:text-[#0F172A]'
                       }`}
                     >
-                      {active ? (
-                        <h1 className="auth-display text-[30px] font-bold leading-tight text-[#0B1736] [@media(max-height:820px)]:text-[26px]">{title}</h1>
-                      ) : (
-                        <div className="auth-display text-[30px] font-bold leading-tight text-[#0B1736] [@media(max-height:820px)]:text-[26px]">{title}</div>
-                      )}
-                      <p className="mt-1.5 text-sm text-[#64748B]">{sub}</p>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Error / info */}
-              {errorMessage && (
-                <div
-                  id="login-error-message"
-                  role="alert"
-                  className="mb-5 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[13px] text-rose-700"
-                >
-                  <AlertCircle className="mt-px h-4 w-4 shrink-0 text-rose-600" />
-                  <span className="font-medium leading-snug">{errorMessage}</span>
+                      {mode === 'login' ? 'Sign in' : 'Create account'}
+                    </button>
+                  ))}
                 </div>
-              )}
-              {infoNotice && (
-                <div
-                  id="login-info-notice"
-                  className="mb-5 flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 p-3 text-[13px] text-blue-800"
-                >
-                  <ShieldCheck className="mt-px h-4 w-4 shrink-0 text-[#2563EB]" />
-                  <span className="font-medium leading-snug">{infoNotice}</span>
+
+                <div className="mb-6 grid [@media(max-height:820px)]:mb-4">
+                  {([
+                    ['login', 'Welcome back', 'Sign in to continue to your PseudoTeam workspace.'],
+                    ['signup', 'Create your account', 'We’ll email a verification link to set your password.'],
+                  ] as const).map(([mode, title, sub]) => {
+                    const active = (mode === 'signup') === isSignup;
+                    return (
+                      <div
+                        key={mode}
+                        aria-hidden={!active}
+                        className={`[grid-area:1/1] transition-all duration-300 ease-out ${
+                          active ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-1 opacity-0'
+                        }`}
+                      >
+                        {active ? (
+                          <h1 className="auth-display text-[30px] font-bold leading-tight text-[#0B1736] [@media(max-height:820px)]:text-[26px]">{title}</h1>
+                        ) : (
+                          <div className="auth-display text-[30px] font-bold leading-tight text-[#0B1736] [@media(max-height:820px)]:text-[26px]">{title}</div>
+                        )}
+                        <p className="mt-1.5 text-sm text-[#64748B]">{sub}</p>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
 
-              {/* changes done by vb */}
-              <div className="grid">
-                <form
-                  id="signup-form"
-                  onSubmit={handleSignup}
-                  className={`space-y-4 [@media(max-height:820px)]:space-y-3 [grid-area:1/1] transition-all duration-300 ease-out ${isSignup ? 'visible translate-y-0 opacity-100 delay-75' : 'invisible translate-y-2 opacity-0'}`}
-                  aria-hidden={!isSignup}
-                  inert={!isSignup}
-                  noValidate={false}
-                > {/* changes done by vb */}
-                  <AuthField
-                    id="signup-name"
-                    label="Full name"
-                    icon={User}
-                    type="text"
-                    value={signupName}
-                    onChange={setSignupName}
-                    placeholder="Jane Doe"
-                    autoComplete="name"
-                    minLength={2}
-                  />
-                  <AuthField
-                    id="signup-email"
-                    label="Work email"
-                    icon={Mail}
-                    type="email"
-                    value={signupEmail}
-                    onChange={setSignupEmail}
-                    placeholder="you@company.com"
-                    autoComplete="email"
-                  />
-                  <AuthField
-                    id="signup-password"
-                    label="Password"
-                    icon={Lock}
-                    type={showSignupPassword ? 'text' : 'password'}
-                    value={signupPassword}
-                    onChange={setSignupPassword}
-                    placeholder="At least 8 characters"
-                    autoComplete="new-password"
-                    minLength={8}
-                    trailing={
-                      <button
-                        type="button"
-                        onClick={() => setShowSignupPassword((v) => !v)}
-                        aria-label={showSignupPassword ? 'Hide password' : 'Show password'}
-                        className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-[#2563EB] cursor-pointer"
-                      >
-                        {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    }
-                    hint={
-                      signupPassword ? (
-                        <div className="mt-2 flex items-center gap-3">
-                          <div className="grid flex-1 grid-cols-4 gap-1">
-                            {[1, 2, 3, 4].map((i) => (
-                              <span
-                                key={i}
-                                className={`h-1 rounded-full transition-colors ${i <= strength ? STRENGTH_COLORS[strength] : 'bg-slate-200'}`}
-                              />
-                            ))}
-                          </div>
-                          <span className="w-16 text-right text-[11px] font-medium text-slate-500">
-                            {STRENGTH_LABELS[signupPassword.length < 8 ? 0 : strength]}
-                          </span>
-                        </div>
-                      ) : null
-                    }
-                  />
-
-                  {/* changes done by vb: entrance animation removed */}
-                  <button
-                    id="signup-submit-btn"
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="group mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-sm font-semibold text-white shadow-[0_8px_20px_rgba(37,99,235,0.28)] transition-all duration-150 hover:shadow-[0_10px_24px_rgba(37,99,235,0.36)] hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer"
+                {errorMessage && (
+                  <div
+                    id="login-error-message"
+                    role="alert"
+                    className="mb-5 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[13px] text-rose-700"
                   >
-                    <span>{isSubmitting ? 'Creating account…' : 'Create account'}</span>
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </button>
-                </form>
-                <form
-                  id="login-form"
-                  onSubmit={handleSubmit}
-                  className={`space-y-4 [@media(max-height:820px)]:space-y-3 [grid-area:1/1] transition-all duration-300 ease-out ${isSignup ? 'invisible translate-y-2 opacity-0' : 'visible translate-y-0 opacity-100 delay-75'}`}
-                  aria-hidden={isSignup}
-                  inert={isSignup}
-                > {/* changes done by vb */}
-                  <AuthField
-                    id="login-email"
-                    label="Work email"
-                    icon={Mail}
-                    type="email"
-                    value={email}
-                    onChange={setEmail}
-                    placeholder="you@company.com"
-                    autoComplete="email"
-                  />
-                  <AuthField
-                    id="login-password"
-                    label="Password"
-                    icon={Lock}
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={setPassword}
-                    placeholder="Your password"
-                    autoComplete="current-password"
-                    labelAside={
-                      <button
-                        id="forgot-password-link"
-                        type="button"
-                        onClick={handleForgotPassword}
-                        className="text-[13px] font-semibold text-[#2563EB] transition-colors hover:text-blue-700 cursor-pointer"
-                      >
-                        Forgot password?
-                      </button>
-                    }
-                    trailing={
-                      <button
-                        id="toggle-password-visibility-btn"
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-[#2563EB] cursor-pointer"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    }
-                  />
-
-                  {/* changes done by vb: entrance animation removed */}
-                  <button
-                    id="login-submit-btn"
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="group mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-sm font-semibold text-white shadow-[0_8px_20px_rgba(37,99,235,0.28)] transition-all duration-150 hover:shadow-[0_10px_24px_rgba(37,99,235,0.36)] hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer"
+                    <AlertCircle className="mt-px h-4 w-4 shrink-0 text-rose-600" />
+                    <span className="font-medium leading-snug">{errorMessage}</span>
+                  </div>
+                )}
+                {infoNotice && (
+                  <div
+                    id="login-info-notice"
+                    className="mb-5 flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 p-3 text-[13px] text-blue-800"
                   >
-                    <span>{isSubmitting ? 'Signing in…' : 'Sign in'}</span>
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </button>
-                </form>
+                    <ShieldCheck className="mt-px h-4 w-4 shrink-0 text-[#2563EB]" />
+                    <span className="font-medium leading-snug">{infoNotice}</span>
+                  </div>
+                )}
+
+                <div className="grid">
+                  <form
+                    id="signup-form"
+                    onSubmit={handleSignup}
+                    className={`space-y-4 [@media(max-height:820px)]:space-y-3 [grid-area:1/1] transition-all duration-300 ease-out ${isSignup ? 'visible translate-y-0 opacity-100 delay-75' : 'invisible translate-y-2 opacity-0'}`}
+                    aria-hidden={!isSignup}
+                    inert={!isSignup}
+                    noValidate={false}
+                  >
+                    <AuthField
+                      id="signup-name"
+                      label="Full name"
+                      icon={User}
+                      type="text"
+                      value={signupName}
+                      onChange={setSignupName}
+                      placeholder="Jane Doe"
+                      autoComplete="name"
+                      minLength={2}
+                    />
+                    <AuthField
+                      id="signup-email"
+                      label="Work email"
+                      icon={Mail}
+                      type="email"
+                      value={signupEmail}
+                      onChange={setSignupEmail}
+                      placeholder="you@company.com"
+                      autoComplete="email"
+                    />
+                    <AuthField
+                      id="signup-contact"
+                      label="Contact number"
+                      icon={Phone}
+                      type="tel"
+                      value={signupContact}
+                      onChange={setSignupContact}
+                      placeholder="+919876543210"
+                      autoComplete="tel"
+                      minLength={10}
+                      maxLength={15}
+                      pattern="^\+?[0-9]{10,15}$"
+                    />
+
+                    <button
+                      id="signup-submit-btn"
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="group mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-sm font-semibold text-white shadow-[0_8px_20px_rgba(37,99,235,0.28)] transition-all duration-150 hover:shadow-[0_10px_24px_rgba(37,99,235,0.36)] hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer"
+                    >
+                      <span>{isSubmitting ? 'Sending verification…' : 'Create account'}</span>
+                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                    </button>
+                  </form>
+
+                  <form
+                    id="login-form"
+                    onSubmit={handleSubmit}
+                    className={`space-y-4 [@media(max-height:820px)]:space-y-3 [grid-area:1/1] transition-all duration-300 ease-out ${isSignup ? 'invisible translate-y-2 opacity-0' : 'visible translate-y-0 opacity-100 delay-75'}`}
+                    aria-hidden={isSignup}
+                    inert={isSignup}
+                  >
+                    <AuthField
+                      id="login-email"
+                      label="Work email"
+                      icon={Mail}
+                      type="email"
+                      value={email}
+                      onChange={setEmail}
+                      placeholder="you@company.com"
+                      autoComplete="email"
+                    />
+                    <AuthField
+                      id="login-password"
+                      label="Password"
+                      icon={Lock}
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={setPassword}
+                      placeholder="Your password"
+                      autoComplete="current-password"
+                      labelAside={
+                        <button
+                          id="forgot-password-link"
+                          type="button"
+                          onClick={handleForgotPassword}
+                          className="text-[13px] font-semibold text-[#2563EB] transition-colors hover:text-blue-700 cursor-pointer"
+                        >
+                          Forgot password?
+                        </button>
+                      }
+                      trailing={
+                        <button
+                          id="toggle-password-visibility-btn"
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                          className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-[#2563EB] cursor-pointer"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      }
+                    />
+
+                    <button
+                      id="login-submit-btn"
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="group mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-sm font-semibold text-white shadow-[0_8px_20px_rgba(37,99,235,0.28)] transition-all duration-150 hover:shadow-[0_10px_24px_rgba(37,99,235,0.36)] hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer"
+                    >
+                      <span>{isSubmitting ? 'Signing in…' : 'Sign in'}</span>
+                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                    </button>
+                  </form>
+                </div>
+
+                <p className="mt-8 text-center text-xs text-slate-400 [@media(max-height:820px)]:mt-4">
+                  By continuing you agree to PseudoTeam’s terms of service.
+                </p>
               </div>
-
-              <p className="mt-8 text-center text-xs text-slate-400 [@media(max-height:820px)]:mt-4"> {/* changes done by vb */}
-                By continuing you agree to PseudoTeam’s terms of service.
-              </p>
-            </div>
             </div>
           </main>
         </div>
       </div>
     );
   }
-  // changes done by vb: end of redesigned sign-in / sign-up / loader
 
   return (
     <div
@@ -824,16 +694,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         backgroundColor: '#F6F9FD',
       }}
     >
-      {/* ========================================================= */}
-      {/* 1. SOPHISTICATED LIGHT ENTERPRISE BACKGROUND              */}
-      {/* Clean #F6F9FD base, subtle blue gradient blobs, thin lines */}
-      {/* ========================================================= */}
       <LightEnterpriseBackground />
 
-      {/* ========================================================= */}
-      {/* 2. ONE CENTERED PREMIUM WHITE CARD                        */}
-      {/* Clean solid white, border #E2E8F0, soft shadow, radius 20px */}
-      {/* ========================================================= */}
       <div
         id="login-card"
         className={`w-full my-auto ${(phase === 'onboarding' || phase === 'onboarding-fading-out')
@@ -841,27 +703,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               ? 'max-w-[calc(100vw-24px)] sm:max-w-[680px] md:max-w-[740px] p-4 sm:p-7 md:p-9'
               : 'max-w-[calc(100vw-24px)] sm:max-w-[480px] p-4 sm:p-6 md:p-7'
             : 'max-w-[calc(100vw-24px)] sm:max-w-[440px] p-4 sm:p-7 md:p-8'
-          } bg-white border border-[#E2E8F0] rounded-[20px] shadow-[0_12px_40px_rgba(0,0,0,0.06),0_2px_6px_rgba(0,0,0,0.03)] relative z-10 transition-all duration-300 max-h-[92dvh] sm:max-h-[95dvh] overflow-y-auto no-scrollbar`} /* changes done by vb */
+          } bg-white border border-[#E2E8F0] rounded-[20px] shadow-[0_12px_40px_rgba(0,0,0,0.06),0_2px_6px_rgba(0,0,0,0.03)] relative z-10 transition-all duration-300 max-h-[92dvh] sm:max-h-[95dvh] overflow-y-auto no-scrollbar`}
         style={{
           opacity: phase === 'onboarding-fading-out' ? 0 : 1,
           transform: phase === 'onboarding-fading-out' ? 'scale(0.97)' : 'scale(1)',
           transition: 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1)'
         }}
       >
-        {/* changes done by vb: old sign-in form (VIEW 1) and welcome loader (VIEW 2) removed from this card;
-            they are now rendered by the redesigned layout above (AuthLoader + split sign-in/sign-up). */}
-
-        {/* ========================================================= */}
-        {/* VIEW 3: PROFILE COMPLETION ONBOARDING (STEPS 1 & 2)       */}
-        {/* ========================================================= */}
         {(phase === 'onboarding' || phase === 'onboarding-fading-out') && (
           <div id="onboarding-flow-container" className="w-full">
             <AnimatePresence mode="wait" custom={slideDirection}>
               {onboardingStep === 1 ? (
-                /* -------------------------------------------------- */
-                /* STEP 1: PROFILE LOCATION                           */
-                /* Large horizontal layout, no logo, light card       */
-                /* -------------------------------------------------- */
                 <motion.div
                   key="step-1"
                   custom={slideDirection}
@@ -888,14 +740,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   }}
                   className="w-full"
                 >
-                  {/* Top: Pill on right, NO logo */}
                   <div className="flex justify-end items-center mb-3">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-[#2563EB] bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
                       STEP 1 OF 2
                     </span>
                   </div>
 
-                  {/* Greeting & Heading */}
                   <div className="mb-5 sm:mb-6 text-left">
                     <div className="text-sm font-semibold text-[#2563EB] mb-1">
                       Hi, Vaniya Batra
@@ -905,10 +755,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     </h2>
                   </div>
 
-                  {/* Form fields: Clean 2-column horizontal responsive layout */}
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-                      {/* Country Dropdown */}
                       <div>
                         <label
                           htmlFor="profile-country"
@@ -927,7 +775,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                             className="w-full h-[44px] px-3.5 sm:px-4 bg-white border border-[#E2E8F0] rounded-xl text-xs sm:text-sm text-[#172033] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/15 appearance-none cursor-pointer transition-all shadow-2xs font-normal"
                           >
                             <option value="" className="text-slate-400">--Select Country--</option>
-                            {COUNTRIES.map(c => (
+                            {COUNTRIES.map((c) => (
                               <option key={c} value={c} className="text-[#172033]">{c}</option>
                             ))}
                           </select>
@@ -935,7 +783,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                         </div>
                       </div>
 
-                      {/* City Dropdown */}
                       <div>
                         <label
                           htmlFor="profile-city"
@@ -951,7 +798,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                             className="w-full h-[44px] px-3.5 sm:px-4 bg-white border border-[#E2E8F0] rounded-xl text-xs sm:text-sm text-[#172033] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/15 appearance-none cursor-pointer transition-all shadow-2xs font-normal"
                           >
                             <option value="" className="text-slate-400">--Select City--</option>
-                            {availableCities.map(c => (
+                            {availableCities.map((c) => (
                               <option key={c} value={c} className="text-[#172033]">{c}</option>
                             ))}
                           </select>
@@ -961,7 +808,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-                      {/* Pincode Input */}
                       <div>
                         <label
                           htmlFor="profile-pincode"
@@ -979,7 +825,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                         />
                       </div>
 
-                      {/* Mailing Address Textarea */}
                       <div>
                         <label
                           htmlFor="profile-address"
@@ -999,7 +844,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     </div>
                   </div>
 
-                  {/* Bottom Actions: [ Next ] [ Skip ] */}
                   <div className="flex items-center gap-3 sm:gap-4 pt-5 sm:pt-6">
                     <button
                       id="step1-next-btn"
@@ -1021,10 +865,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   </div>
                 </motion.div>
               ) : (
-                /* -------------------------------------------------- */
-                /* STEP 2: ORGANIZATION / INDIVIDUAL                  */
-                /* Clean light mode, no logo, pill top right          */
-                /* -------------------------------------------------- */
                 <motion.div
                   key="step-2"
                   custom={slideDirection}
@@ -1051,7 +891,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   }}
                   className="w-full"
                 >
-                  {/* Top: Pill on right, NO logo */}
                   <div className="flex justify-end items-center mb-3">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-[#2563EB] bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
                       STEP 2 OF 2
@@ -1064,9 +903,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     </h2>
                   </div>
 
-                  {/* Form fields */}
                   <div className="space-y-3.5 sm:space-y-4">
-                    {/* You are an: Segmented Selector */}
                     <div>
                       <label className="block text-xs font-semibold text-[#172033] mb-1.5">
                         You are an
@@ -1076,10 +913,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                           id="entity-organization-btn"
                           type="button"
                           onClick={() => setEntityType('Organization')}
-                          className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer ${entityType === 'Organization'
+                          className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer ${
+                            entityType === 'Organization'
                               ? 'bg-[#2563EB] text-white shadow-xs'
                               : 'text-slate-600 hover:text-[#172033]'
-                            }`}
+                          }`}
                         >
                           Organization
                         </button>
@@ -1087,17 +925,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                           id="entity-individual-btn"
                           type="button"
                           onClick={() => setEntityType('Individual')}
-                          className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer ${entityType === 'Individual'
+                          className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer ${
+                            entityType === 'Individual'
                               ? 'bg-[#2563EB] text-white shadow-xs'
                               : 'text-slate-600 hover:text-[#172033]'
-                            }`}
+                          }`}
                         >
                           Individual
                         </button>
                       </div>
                     </div>
 
-                    {/* About Field */}
                     <div>
                       <label
                         htmlFor="profile-about"
@@ -1115,10 +953,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       />
                     </div>
 
-                    {/* Dynamic Fields based on entityType */}
                     {entityType === 'Organization' ? (
                       <div className="space-y-3">
-                        {/* Organization Name */}
                         <div>
                           <label
                             htmlFor="profile-org-name"
@@ -1136,9 +972,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                           />
                         </div>
 
-                        {/* CIN & GST Number side by side */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {/* CIN */}
                           <div>
                             <label
                               htmlFor="profile-cin"
@@ -1156,7 +990,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                             />
                           </div>
 
-                          {/* GST Number */}
                           <div>
                             <label
                               htmlFor="profile-gst"
@@ -1213,7 +1046,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     )}
                   </div>
 
-                  {/* Bottom Actions: [ Prev ] [ Submit ] */}
                   <div className="flex items-center gap-3 pt-5 sm:pt-6">
                     <button
                       id="step2-prev-btn"
@@ -1240,7 +1072,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
-        {/* Bottom Card Footer: "PseudoTeam Workspace" with subtle gray text and small blue dot */}
         <div className="mt-4 sm:mt-5 pt-3 sm:pt-3.5 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] sm:text-xs text-[#94A3B8] font-medium">
           <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
           <span>PseudoTeam Workspace</span>
