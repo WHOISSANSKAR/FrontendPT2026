@@ -14,7 +14,10 @@ import {
   AlertTriangle,
   CheckSquare,
   ChevronDown,
-  Loader2
+  Loader2,
+  FileCheck2,
+  Download,
+  ExternalLink
 } from 'lucide-react';
 import { getTaskActivity } from '../services/taskActivity.service';
 import {
@@ -42,6 +45,16 @@ interface MilestoneTasksViewProps {
   currentUser?: string;
 }
 
+interface TaskPocDetails {
+  task: MilestoneTask;
+  url: string;
+  fileName: string;
+  mimeType: string;
+  isBlobUrl?: boolean;
+  notes?: string;
+  approvedAt?: string;
+}
+
 const formatDisplayDate = (dateStr?: string): string => {
   if (!dateStr) return '—';
   const trimmed = String(dateStr).trim();
@@ -56,6 +69,138 @@ const formatDisplayDate = (dateStr?: string): string => {
     }
   }
   return trimmed;
+};
+
+const isFulfilledStatus = (val?: string | null): boolean => {
+  const s = String(val || '').trim().toLowerCase();
+  return s === 'fullfilled' || s === 'fulfilled';
+};
+
+const isTaskFulfilled = (task: MilestoneTask): boolean => {
+  const rawTask = task as MilestoneTask & {
+    serviceProviderStatus?: string | null;
+    service_provider_status?: string | null;
+    ptStatus?: string | null;
+    pt_status?: string | null;
+  };
+  return (
+    isFulfilledStatus(task.status) ||
+    isFulfilledStatus(rawTask.serviceProviderStatus) ||
+    isFulfilledStatus(rawTask.service_provider_status) ||
+    isFulfilledStatus(rawTask.ptStatus) ||
+    isFulfilledStatus(rawTask.pt_status)
+  );
+};
+
+const getTaskPocMeta = (task: MilestoneTask) => {
+  const rawTask = task as MilestoneTask & {
+    pocUrl?: string | null;
+    poc_url?: string | null;
+    poc_file_url?: string | null;
+    proofCompletionUrl?: string | null;
+    pocFileName?: string | null;
+    poc_file_name?: string | null;
+    pocNotes?: string | null;
+    poc_notes?: string | null;
+    hasPocBlob?: boolean;
+    has_poc_blob?: boolean;
+    pocAvailable?: boolean;
+    poc_available?: boolean;
+    pocApproved?: boolean;
+    poc_approved?: boolean;
+    proofCompletionApproved?: boolean;
+    proof_completion_approved?: boolean;
+    pocApprovedAt?: string;
+    poc_approved_at?: string;
+    proofOfCompletion?: {
+      url?: string | null;
+      fileName?: string | null;
+      notes?: string | null;
+      available?: boolean;
+      approved?: boolean;
+      approvedAt?: string;
+    } | null;
+  };
+
+  const url =
+    rawTask.proofOfCompletion?.url ||
+    rawTask.pocUrl ||
+    rawTask.poc_url ||
+    rawTask.poc_file_url ||
+    rawTask.proofCompletionUrl ||
+    '';
+
+  const hasExplicitAvailable =
+    rawTask.proofOfCompletion?.available ??
+    rawTask.pocAvailable ??
+    rawTask.poc_available ??
+    rawTask.hasPocBlob ??
+    rawTask.has_poc_blob;
+
+  const isAvailable =
+    hasExplicitAvailable !== undefined
+      ? Boolean(hasExplicitAvailable)
+      : Boolean(url && String(url).trim().length > 0);
+
+  const isApproved = Boolean(
+    rawTask.proofOfCompletion?.approved ??
+      rawTask.pocApproved ??
+      rawTask.poc_approved ??
+      rawTask.proofCompletionApproved ??
+      rawTask.proof_completion_approved ??
+      false
+  );
+
+  const fulfilled = isTaskFulfilled(task);
+  const canViewPoc = fulfilled && isAvailable && isApproved;
+
+  const fileName =
+    rawTask.proofOfCompletion?.fileName ||
+    rawTask.pocFileName ||
+    rawTask.poc_file_name ||
+    (url ? url.split('?')[0].split('/').pop() || 'proof-of-completion' : 'proof-of-completion');
+
+  const notes =
+    rawTask.proofOfCompletion?.notes ||
+    rawTask.pocNotes ||
+    rawTask.poc_notes ||
+    undefined;
+
+  const approvedAt =
+    rawTask.proofOfCompletion?.approvedAt ||
+    rawTask.pocApprovedAt ||
+    rawTask.poc_approved_at ||
+    undefined;
+
+  let disabledReason = 'Proof of Completion unavailable';
+  if (!fulfilled) {
+    disabledReason = 'Available once task is fulfilled';
+  } else if (!isAvailable) {
+    disabledReason = 'Proof of Completion not uploaded yet';
+  } else if (!isApproved) {
+    disabledReason = 'Proof of Completion pending approval';
+  }
+
+  return {
+    canViewPoc,
+    url: String(url || '').trim(),
+    fileName,
+    notes,
+    approvedAt,
+    disabledReason
+  };
+};
+
+const isImagePoc = (url: string, fileName: string, mimeType: string): boolean => {
+  if (mimeType.startsWith('image/')) return true;
+  const target = `${fileName} ${url}`.toLowerCase();
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(target);
+};
+
+const isPdfPoc = (url: string, fileName: string, mimeType: string): boolean => {
+  if (mimeType === 'application/pdf') return true;
+  const target = `${fileName} ${url}`.toLowerCase();
+  return /\.pdf(\?|#|$)/.test(target);
 };
 
 export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
@@ -175,6 +320,100 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
   const [taskActivity, setTaskActivity] = useState<
     Record<string, { loading: boolean; error: string | null; items: MilestoneTaskActivity[] }>
   >({});
+
+  const [activePocModal, setActivePocModal] = useState<TaskPocDetails | null>(null);
+  const [loadingPocTaskId, setLoadingPocTaskId] = useState<string | number | null>(null);
+  const [pocErrorToast, setPocErrorToast] = useState<string | null>(null);
+  const [downloadingPoc, setDownloadingPoc] = useState(false);
+
+  const closePocModal = () => {
+    setActivePocModal(prev => {
+      if (prev?.isBlobUrl && prev.url) {
+        URL.revokeObjectURL(prev.url);
+      }
+      return null;
+    });
+  };
+
+  const getAuthHeaders = (): Record<string, string> => {
+    const token =
+      localStorage.getItem('access_token') ||
+      localStorage.getItem('token') ||
+      localStorage.getItem('auth_token') ||
+      '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const handleOpenPocModal = async (task: MilestoneTask) => {
+    const pocMeta = getTaskPocMeta(task);
+    if (!pocMeta.canViewPoc) return;
+
+    setPocErrorToast(null);
+    setLoadingPocTaskId(task.id);
+
+    const endpointUrl =
+      pocMeta.url || `/api/projects/${project.id}/tasks/${task.id}/poc`;
+
+    try {
+      const response = await fetch(endpointUrl, {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) {
+        throw new Error('Unable to fetch Proof of Completion.');
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      const resolvedFileName = match?.[1] || pocMeta.fileName;
+
+      setActivePocModal({
+        task,
+        url: objectUrl,
+        fileName: resolvedFileName,
+        mimeType: blob.type || '',
+        isBlobUrl: true,
+        notes: pocMeta.notes,
+        approvedAt: pocMeta.approvedAt
+      });
+    } catch {
+      if (pocMeta.url) {
+        setActivePocModal({
+          task,
+          url: pocMeta.url,
+          fileName: pocMeta.fileName,
+          mimeType: '',
+          isBlobUrl: false,
+          notes: pocMeta.notes,
+          approvedAt: pocMeta.approvedAt
+        });
+      } else {
+        setPocErrorToast('Could not load Proof of Completion for this task.');
+      }
+    } finally {
+      setLoadingPocTaskId(null);
+    }
+  };
+
+  const handleDownloadPoc = async (poc: TaskPocDetails) => {
+    if (!poc.url) return;
+    setDownloadingPoc(true);
+    try {
+      const link = document.createElement('a');
+      link.href = poc.url;
+      link.download = poc.fileName || 'proof-of-completion';
+      if (!poc.isBlobUrl) {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      }
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setDownloadingPoc(false);
+    }
+  };
 
   const toggleTaskActivity = async (task: MilestoneTask) => {
     const willOpen = !openActivityIds[task.id];
@@ -675,6 +914,19 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
         </div>
       </div>
 
+      {pocErrorToast && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-1.5 rounded-lg flex items-center justify-between shrink-0">
+          <span>{pocErrorToast}</span>
+          <button
+            type="button"
+            onClick={() => setPocErrorToast(null)}
+            className="text-rose-500 hover:text-rose-700 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* 6. Stable Two-Column Grid: LEFT (Task Timeline) + RIGHT (Milestone Information) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3 lg:overflow-hidden">
         {/* LEFT COLUMN: Task Timeline (8 cols) */}
@@ -712,11 +964,13 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             {filteredTasks.length > 0 ? (
               <div className="relative pl-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
                 {filteredTasks.map((task) => {
-                  const isCompleted = task.status === 'Completed' || task.progress === 100;
+                  const isCompleted = task.status === 'Completed' || task.progress === 100 || isTaskFulfilled(task);
                   const isInProgress = task.status === 'In Progress';
                   const isAtRisk = task.status === 'At Risk';
                   const { isSelfOverdue: isOverdueTask } = getTaskOverdueInfo(task);
                   const isHighlighted = highlightTaskId === task.id;
+                  const pocMeta = getTaskPocMeta(task);
+                  const isLoadingThisPoc = loadingPocTaskId === task.id;
 
                   return (
                     <div
@@ -819,21 +1073,42 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                           const items = state?.items ?? [];
                           return (
                             <div className="mt-2 pt-2 border-t border-slate-100">
-                              <button
-                                type="button"
-                                onClick={() => toggleTaskActivity(task)}
-                                aria-expanded={isOpen}
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5" />
-                                <span>{isOpen ? 'Hide activity' : 'Show activity'}</span>
-                                {items.length > 0 && (
-                                  <span className="ml-0.5 px-1.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] text-blue-700">
-                                    {items.length}
-                                  </span>
-                                )}
-                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                              </button>
+                              <div className="flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTaskActivity(task)}
+                                  aria-expanded={isOpen}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  <span>{isOpen ? 'Hide activity' : 'Show activity'}</span>
+                                  {items.length > 0 && (
+                                    <span className="ml-0.5 px-1.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] text-blue-700">
+                                      {items.length}
+                                    </span>
+                                  )}
+                                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={!pocMeta.canViewPoc || isLoadingThisPoc}
+                                  onClick={() => handleOpenPocModal(task)}
+                                  title={pocMeta.canViewPoc ? 'View Proof of Completion' : pocMeta.disabledReason}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                                    pocMeta.canViewPoc
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer shadow-2xs'
+                                      : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-70'
+                                  }`}
+                                >
+                                  {isLoadingThisPoc ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <FileCheck2 className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>View PoC</span>
+                                </button>
+                              </div>
 
                               {isOpen && (
                                 <div className="mt-2 space-y-2">
@@ -1052,6 +1327,111 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* View Proof of Completion (PoC) Modal */}
+      {activePocModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/70">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
+                  <FileCheck2 className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-slate-900 truncate">
+                    Proof of Completion — {activePocModal.task.taskNumber}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    {activePocModal.task.name} ({activePocModal.fileName})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closePocModal}
+                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3 flex-1 bg-slate-50/40">
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-200/80 rounded-xl px-3.5 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <Check className="w-3 h-3" />
+                    Fulfilled & PoC Approved
+                  </span>
+                  {activePocModal.approvedAt && (
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Approved: {formatDisplayDate(activePocModal.approvedAt)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={activePocModal.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open in Tab</span>
+                  </a>
+                  <button
+                    type="button"
+                    disabled={downloadingPoc}
+                    onClick={() => handleDownloadPoc(activePocModal)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    {downloadingPoc ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    <span>{downloadingPoc ? 'Downloading...' : 'Download PoC'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {activePocModal.notes && (
+                <div className="bg-white border border-slate-200/80 rounded-xl p-3 text-xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Verification Notes
+                  </span>
+                  <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+                    {activePocModal.notes}
+                  </p>
+                </div>
+              )}
+
+              <div className="bg-white border border-slate-200/90 rounded-xl p-3 flex items-center justify-center min-h-[280px]">
+                {isImagePoc(activePocModal.url, activePocModal.fileName, activePocModal.mimeType) ? (
+                  <img
+                    src={activePocModal.url}
+                    alt={`Proof of completion for ${activePocModal.task.name}`}
+                    className="max-h-[420px] w-auto object-contain rounded-lg"
+                  />
+                ) : isPdfPoc(activePocModal.url, activePocModal.fileName, activePocModal.mimeType) ? (
+                  <iframe
+                    src={activePocModal.url}
+                    title={`Proof of completion PDF for ${activePocModal.task.name}`}
+                    className="w-full h-[380px] rounded-lg border border-slate-200"
+                  />
+                ) : (
+                  <div className="text-center py-8 px-4 space-y-2">
+                    <FileCheck2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                    <p className="text-xs font-bold text-slate-800">{activePocModal.fileName}</p>
+                    <p className="text-[11px] text-slate-500 max-w-sm">
+                      Inline preview is not available for this file format. Use <strong>Download PoC</strong> or <strong>Open in Tab</strong> to inspect the file.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Task Modal */}
       {showAddTaskModal && (
