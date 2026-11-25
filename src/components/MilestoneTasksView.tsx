@@ -33,6 +33,27 @@ import {
 } from '../utils/overdueHierarchy';
 import { OverdueDot } from './OverdueDot';
 
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'
+).replace(/\/$/, '');
+
+const resolveApiUrl = (rawUrl?: string | null): string => {
+  if (!rawUrl) return '';
+  const trimmed = String(rawUrl).trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/api/')) {
+    const origin = API_BASE_URL.replace(/\/api$/, '');
+    return `${origin}${trimmed}`;
+  }
+  if (trimmed.startsWith('/')) {
+    return `${API_BASE_URL}${trimmed}`;
+  }
+  return `${API_BASE_URL}/${trimmed}`;
+};
+
 interface MilestoneTasksViewProps {
   project: ProjectItem;
   location: ProjectLocation;
@@ -48,8 +69,10 @@ interface MilestoneTasksViewProps {
 interface TaskPocDetails {
   task: MilestoneTask;
   url: string;
+  downloadUrl: string;
   fileName: string;
   mimeType: string;
+  sizeBytes: number;
   isBlobUrl?: boolean;
   notes?: string;
   approvedAt?: string;
@@ -342,9 +365,12 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
 
   const getAuthHeaders = (): Record<string, string> => {
     const token =
+      localStorage.getItem('auth_token') ||
       localStorage.getItem('access_token') ||
       localStorage.getItem('token') ||
-      localStorage.getItem('auth_token') ||
+      localStorage.getItem('customer_token') ||
+      sessionStorage.getItem('access_token') ||
+      sessionStorage.getItem('token') ||
       '';
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
@@ -356,62 +382,89 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     setPocErrorToast(null);
     setLoadingPocTaskId(task.id);
 
-    const endpointUrl =
-      pocMeta.url || `/api/v1/customer/projects/${project.id}/tasks/${task.id}/poc`;
+    const fallbackPath = `/v1/customer/projects/${project.id}/tasks/${task.id}/poc`;
+    const endpointUrl = resolveApiUrl(pocMeta.url || fallbackPath);
+    const downloadEndpointUrl = `${endpointUrl}${endpointUrl.includes('?') ? '&' : '?'}download=true`;
 
     try {
       const response = await fetch(endpointUrl, {
-        headers: getAuthHeaders()
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
       });
+
       if (!response.ok) {
-        throw new Error('Unable to fetch Proof of Completion.');
+        const errText = await response.text().catch(() => '');
+        throw new Error(
+          errText || `Failed to load Proof of Completion (HTTP ${response.status}).`
+        );
       }
 
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
+      const rawBlob = await response.blob();
+      if (!rawBlob || rawBlob.size === 0) {
+        throw new Error(
+          'Proof of Completion file is empty (0 bytes). Please verify the file in the database.'
+        );
+      }
+
       const disposition = response.headers.get('Content-Disposition') || '';
       const match = disposition.match(/filename="?([^"]+)"?/i);
+      const headerContentType = (response.headers.get('Content-Type') || '').split(';')[0].trim();
       const resolvedFileName = match?.[1] || pocMeta.fileName;
+
+      let resolvedMimeType =
+        rawBlob.type && rawBlob.type !== 'application/octet-stream'
+          ? rawBlob.type
+          : headerContentType || 'application/octet-stream';
+
+      if (resolvedMimeType === 'application/octet-stream') {
+        const lowerName = resolvedFileName.toLowerCase();
+        if (lowerName.endsWith('.pdf')) resolvedMimeType = 'application/pdf';
+        else if (lowerName.endsWith('.png')) resolvedMimeType = 'image/png';
+        else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) resolvedMimeType = 'image/jpeg';
+        else if (lowerName.endsWith('.webp')) resolvedMimeType = 'image/webp';
+        else if (lowerName.endsWith('.gif')) resolvedMimeType = 'image/gif';
+      }
+
+      const typedBlob =
+        rawBlob.type === resolvedMimeType
+          ? rawBlob
+          : new Blob([rawBlob], { type: resolvedMimeType });
+
+      const objectUrl = URL.createObjectURL(typedBlob);
 
       setActivePocModal({
         task,
         url: objectUrl,
+        downloadUrl: downloadEndpointUrl,
         fileName: resolvedFileName,
-        mimeType: blob.type || '',
+        mimeType: resolvedMimeType,
+        sizeBytes: typedBlob.size,
         isBlobUrl: true,
         notes: pocMeta.notes,
         approvedAt: pocMeta.approvedAt
       });
-    } catch {
-      if (pocMeta.url) {
-        setActivePocModal({
-          task,
-          url: pocMeta.url,
-          fileName: pocMeta.fileName,
-          mimeType: '',
-          isBlobUrl: false,
-          notes: pocMeta.notes,
-          approvedAt: pocMeta.approvedAt
-        });
-      } else {
-        setPocErrorToast('Could not load Proof of Completion for this task.');
-      }
+    } catch (err) {
+      setPocErrorToast(
+        err instanceof Error
+          ? err.message
+          : 'Could not load Proof of Completion for this task.'
+      );
     } finally {
       setLoadingPocTaskId(null);
     }
   };
 
   const handleDownloadPoc = async (poc: TaskPocDetails) => {
-    if (!poc.url) return;
+    if (!poc.url || poc.sizeBytes <= 0) {
+      setPocErrorToast('Cannot download an empty Proof of Completion file.');
+      return;
+    }
     setDownloadingPoc(true);
     try {
       const link = document.createElement('a');
       link.href = poc.url;
       link.download = poc.fileName || 'proof-of-completion';
-      if (!poc.isBlobUrl) {
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-      }
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1345,7 +1398,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                     Proof of Completion — {activePocModal.task.taskNumber}
                   </h3>
                   <p className="text-[11px] text-slate-500 truncate">
-                    {activePocModal.task.name} ({activePocModal.fileName})
+                    {activePocModal.task.name} ({activePocModal.fileName} • {(activePocModal.sizeBytes / 1024).toFixed(1)} KB)
                   </p>
                 </div>
               </div>
@@ -1383,7 +1436,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                   </a>
                   <button
                     type="button"
-                    disabled={downloadingPoc}
+                    disabled={downloadingPoc || activePocModal.sizeBytes <= 0}
                     onClick={() => handleDownloadPoc(activePocModal)}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 transition-colors cursor-pointer shadow-2xs"
                   >
@@ -1409,24 +1462,36 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
               )}
 
               <div className="bg-white border border-slate-200/90 rounded-xl p-3 flex items-center justify-center min-h-[280px]">
-                {isImagePoc(activePocModal.url, activePocModal.fileName, activePocModal.mimeType) ? (
+                {activePocModal.sizeBytes <= 0 ? (
+                  <div className="text-center py-8 px-4 space-y-2">
+                    <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto" />
+                    <p className="text-xs font-bold text-slate-800">Empty Proof of Completion File</p>
+                    <p className="text-[11px] text-slate-500 max-w-sm">
+                      The stored file has 0 bytes. Please check the database record or re-upload the Proof of Completion.
+                    </p>
+                  </div>
+                ) : isImagePoc(activePocModal.url, activePocModal.fileName, activePocModal.mimeType) ? (
                   <img
                     src={activePocModal.url}
                     alt={`Proof of completion for ${activePocModal.task.name}`}
                     className="max-h-[420px] w-auto object-contain rounded-lg"
                   />
                 ) : isPdfPoc(activePocModal.url, activePocModal.fileName, activePocModal.mimeType) ? (
-                  <iframe
-                    src={activePocModal.url}
-                    title={`Proof of completion PDF for ${activePocModal.task.name}`}
+                  <object
+                    data={activePocModal.url}
+                    type="application/pdf"
                     className="w-full h-[380px] rounded-lg border border-slate-200"
-                  />
+                  >
+                    <p className="text-xs text-slate-600 p-4 text-center">
+                      PDF preview is blocked by browser settings. Use <strong>Open in Tab</strong> or <strong>Download PoC</strong>.
+                    </p>
+                  </object>
                 ) : (
                   <div className="text-center py-8 px-4 space-y-2">
                     <FileCheck2 className="w-8 h-8 text-emerald-600 mx-auto" />
                     <p className="text-xs font-bold text-slate-800">{activePocModal.fileName}</p>
                     <p className="text-[11px] text-slate-500 max-w-sm">
-                      Inline preview is not available for this file format. Use <strong>Download PoC</strong> or <strong>Open in Tab</strong> to inspect the file.
+                      Inline preview is not available for this file format ({(activePocModal.sizeBytes / 1024).toFixed(1)} KB). Use <strong>Download PoC</strong> or <strong>Open in Tab</strong> to inspect the file.
                     </p>
                   </div>
                 )}
