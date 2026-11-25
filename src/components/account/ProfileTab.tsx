@@ -19,8 +19,8 @@ interface ProfileTabProps {
   setJobTitle: (val: string) => void;
   department: string;
   setDepartment: (val: string) => void;
-  organization: string;
-  setOrganization: (val: string) => void;
+  organization?: string;
+  setOrganization?: (val: string) => void;
   timezone: string;
   setTimezone: (val: string) => void;
   avatarUrl: string | null;
@@ -42,8 +42,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   setJobTitle,
   department,
   setDepartment,
-  organization,
-  setOrganization,
+  // organization,
+  // setOrganization,
   timezone,
   setTimezone,
   avatarUrl,
@@ -332,18 +332,18 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             </div>
 
             {/* Organization */}
-            <div>
+            {/* <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Organization
               </label>
               <input 
                 type="text"
-                value={organization}
-                onChange={(e) => setOrganization(e.target.value)}
+                value={organization ?? ''}
+                onChange={(e) => setOrganization?.(e.target.value)}
                 className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-100 transition-all"
                 placeholder="PseudoTeam Technologies"
               />
-            </div>
+            </div> */}
 
             {/* Timezone */}
             <div>
