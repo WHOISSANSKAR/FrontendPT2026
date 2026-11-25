@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
   Check,
-  CheckCircle2,
   Clock,
   Layers,
   MapPin,
@@ -14,10 +13,10 @@ import {
   Sparkles,
   AlertTriangle,
   CheckSquare,
-  ChevronDown, // changes done by vb
-  Loader2 // changes done by vb
+  ChevronDown,
+  Loader2
 } from 'lucide-react';
-import { getTaskActivity } from '../services/taskActivity.service'; // changes done by vb
+import { getTaskActivity } from '../services/taskActivity.service';
 import {
   ProjectItem,
   ProjectLocation,
@@ -25,7 +24,11 @@ import {
   MilestoneTask,
   MilestoneTaskActivity
 } from '../types';
-import { isTaskOverdue } from '../utils/overdue';
+import {
+  getMilestoneOverdueInfo,
+  getTaskOverdueInfo,
+} from '../utils/overdueHierarchy';
+import { OverdueDot } from './OverdueDot';
 
 interface MilestoneTasksViewProps {
   project: ProjectItem;
@@ -67,8 +70,9 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
   currentUser = 'Customer'
 }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const highlightTaskId = searchParams.get('taskId');
 
-  // All milestones for current location from API
   const locationMilestones = useMemo(() => {
     if (Array.isArray(propMilestones)) {
       return propMilestones;
@@ -79,20 +83,16 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     return [initialMilestone];
   }, [propMilestones, location.milestones, initialMilestone]);
 
-  // Selected Milestone state
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>(initialMilestone.id);
 
-  // Sync if initialMilestone prop changes
   useEffect(() => {
     setSelectedMilestoneId(initialMilestone.id);
   }, [initialMilestone.id]);
 
-  // Current active milestone object
   const activeMilestone = useMemo(() => {
     return locationMilestones.find(m => m.id === selectedMilestoneId) || initialMilestone;
   }, [locationMilestones, selectedMilestoneId, initialMilestone]);
 
-  // Horizontal scroll container refs and handlers
   const milestoneScrollRef = useRef<HTMLDivElement>(null);
   const isDraggingMilestoneRef = useRef(false);
   const startXMilestoneRef = useRef(0);
@@ -128,7 +128,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     isDraggingMilestoneRef.current = false;
   };
 
-  // Center active milestone in selector bar when milestone changes
   useEffect(() => {
     if (!milestoneScrollRef.current) return;
     const activeEl = milestoneScrollRef.current.querySelector<HTMLElement>(`#milestone-selector-pill-${activeMilestone.id}`);
@@ -137,7 +136,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     }
   }, [activeMilestone.id]);
 
-  // Milestone switching handler
   const handleSelectMilestone = (m: LocationMilestone) => {
     setSelectedMilestoneId(m.id);
     if (onSelectMilestone) {
@@ -149,10 +147,8 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     );
   };
 
-  // Local state of tasks per milestone
   const [tasksMap, setTasksMap] = useState<Record<string, MilestoneTask[]>>({});
 
-  // Always use real API tasks from activeMilestone (even when [])
   const activeTasks = useMemo(() => {
     if (tasksMap[activeMilestone.id]) {
       return tasksMap[activeMilestone.id];
@@ -160,7 +156,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     return Array.isArray(activeMilestone.tasks) ? activeMilestone.tasks : [];
   }, [tasksMap, activeMilestone]);
 
-  // Filter tasks
   const [statusFilter, setStatusFilter] = useState<'All' | 'Completed' | 'In Progress' | 'Pending' | 'At Risk'>('All');
 
   const filteredTasks = useMemo(() => {
@@ -168,7 +163,14 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     return activeTasks.filter(t => t.status === statusFilter);
   }, [activeTasks, statusFilter]);
 
-  // changes done by vb
+  useEffect(() => {
+    if (!highlightTaskId) return;
+    const el = document.getElementById(`milestone-task-card-${highlightTaskId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightTaskId, filteredTasks]);
+
   const [openActivityIds, setOpenActivityIds] = useState<Record<string, boolean>>({});
   const [taskActivity, setTaskActivity] = useState<
     Record<string, { loading: boolean; error: string | null; items: MilestoneTaskActivity[] }>
@@ -198,19 +200,16 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     }
   };
 
-  // Milestone-level notes state (clean, no mock notes)
   const [milestoneNotes, setMilestoneNotes] = useState<
     Record<string, { id: string; user: string; text: string; time: string }[]>
   >({});
   const [newMilestoneNote, setNewMilestoneNote] = useState('');
 
-  // Metrics computation across tasks
   const totalTasksCount = activeTasks.length;
   const completedTasksCount = activeTasks.filter(
     t => t.status === 'Completed' || t.progress === 100
   ).length;
 
-  // Calculate weighted completion percentage (falls back to milestone progress if no tasks or 0 total weight)
   const calculatedCompletion = useMemo(() => {
     if (activeTasks.length === 0) return Number(activeMilestone.progress || 0);
     const totalWeight = activeTasks.reduce((sum, t) => sum + Number(t.weightage || 0), 0);
@@ -225,7 +224,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     return Math.round((earnedWeight / totalWeight) * 100);
   }, [activeTasks, activeMilestone.progress]);
 
-  // Modal for adding a new task
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
@@ -233,7 +231,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
   const [newTaskStart, setNewTaskStart] = useState('');
   const [newTaskEnd, setNewTaskEnd] = useState('');
 
-  // Handler: create new task
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskName.trim()) return;
@@ -274,7 +271,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     setNewTaskEnd('');
   };
 
-  // Handler: post milestone note
   const handlePostMilestoneNote = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMilestoneNote.trim()) return;
@@ -294,13 +290,12 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
     setNewMilestoneNote('');
   };
 
-  // Status Pill renderer
   const renderStatusPill = (status: string) => {
     switch (status) {
       case 'Completed':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+            <Check className="w-3 h-3 text-emerald-600" />
             <span>Completed</span>
           </span>
         );
@@ -338,12 +333,11 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
   const regionTag = location.countryCode || (location.country && location.country !== '—' ? location.country : '');
 
   return (
-    <div 
+    <div
       id="milestone-tasks-viewport"
       className="w-full min-h-[calc(100dvh-56px)] flex-1 overflow-y-auto lg:overflow-hidden lg:h-[calc(100dvh-56px)] lg:max-h-[calc(100dvh-56px)] flex flex-col bg-[#F4F6F9] px-3 sm:px-4 lg:px-6 py-2 gap-2 select-none"
     >
       {/* 1. Breadcrumbs + Navigation Bar */}
-      {/* changes done by vb */}
       <div className="flex items-center shrink-0">
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 font-medium min-w-0">
           <button
@@ -398,7 +392,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
       </div>
 
       {/* 2. Top Milestone Selector Bar */}
-      <div 
+      <div
         id="top-milestone-selector-bar"
         className="bg-white rounded-xl border border-slate-200/90 px-3.5 py-1.5 flex items-center justify-between shadow-2xs shrink-0 gap-3 overflow-hidden"
       >
@@ -406,7 +400,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pr-1 shrink-0 select-none">
             Milestones:
           </span>
-          <div 
+          <div
             id="milestone-selector-scroll-container"
             ref={milestoneScrollRef}
             onWheel={handleMilestoneWheel}
@@ -414,7 +408,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             onMouseMove={handleMilestoneMouseMove}
             onMouseUp={handleMilestoneMouseUp}
             onMouseLeave={handleMilestoneMouseUp}
-            className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar scrollbar-none flex-nowrap w-full select-none scroll-x-visible" /* changes done by vb */
+            className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar scrollbar-none flex-nowrap w-full select-none scroll-x-visible"
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
@@ -423,6 +417,8 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           >
             {locationMilestones.map((m, idx) => {
               const isSelected = m.id === activeMilestone.id;
+              const mInfo = getMilestoneOverdueInfo(m, project.id, location.id);
+
               return (
                 <React.Fragment key={m.id}>
                   {idx > 0 && (
@@ -444,17 +440,29 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                     }`}
                   >
                     <span className="flex items-center gap-1.5 whitespace-nowrap">
-                      <span 
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          m.status === 'Completed' || m.progress === 100
-                            ? isSelected ? 'bg-emerald-300 ring-2 ring-white/30' : 'bg-emerald-500'
-                            : isSelected ? 'bg-sky-200' : 'bg-blue-500'
-                        }`} 
-                      />
+                      {mInfo.hasAnyOverdue && (
+                        <OverdueDot
+                          title={
+                            mInfo.hasOverdueTask
+                              ? `${mInfo.overdueTaskCount} overdue task(s) in ${m.name}`
+                              : `Milestone overdue: ${m.name}`
+                          }
+                          onLightBg={!isSelected}
+                        />
+                      )}
+                      {!mInfo.hasAnyOverdue && (
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            m.status === 'Completed' || m.progress === 100
+                              ? isSelected ? 'bg-emerald-300 ring-2 ring-white/30' : 'bg-emerald-500'
+                              : isSelected ? 'bg-sky-200' : 'bg-blue-500'
+                          }`}
+                        />
+                      )}
                       <span>{m.name}</span>
                     </span>
 
-                    <span 
+                    <span
                       className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full leading-none shrink-0 ${
                         isSelected
                           ? 'bg-white/20 text-white'
@@ -479,11 +487,10 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
       </div>
 
       {/* 3. Milestone Header */}
-      <div 
+      <div
         id="milestone-tasks-header"
-        className="bg-[#F2F7FF] rounded-xl border border-blue-100 px-3.5 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 shadow-2xs shrink-0" /* changes done by vb */
+        className="bg-[#F2F7FF] rounded-xl border border-blue-100 px-3.5 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 shadow-2xs shrink-0"
       >
-        {/* changes done by vb */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -519,7 +526,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div className="w-24 h-1.5 bg-slate-200/80 rounded-full overflow-hidden border border-slate-200">
-                <div 
+                <div
                   className={`h-full rounded-full transition-all duration-500 ${
                     calculatedCompletion === 100 ? 'bg-emerald-500' : 'bg-blue-600'
                   }`}
@@ -536,7 +543,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
 
       {/* 4. Milestone Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 shrink-0">
-        {/* 1. Overall Task Progress */}
         <div className="bg-white rounded-xl border border-slate-200/90 py-1 px-2.5 shadow-2xs">
           <div className="text-[10px] font-medium text-slate-500">Overall Task Progress</div>
           <div className="text-sm font-extrabold text-slate-900 font-mono mt-0.5 leading-tight flex items-center justify-between">
@@ -546,7 +552,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             </span>
           </div>
           <div className="w-full bg-slate-100 h-1 rounded-full mt-1 overflow-hidden">
-            <div 
+            <div
               className={`h-full rounded-full transition-all duration-500 ${
                 calculatedCompletion === 100 ? 'bg-emerald-500' : 'bg-blue-600'
               }`}
@@ -555,7 +561,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
         </div>
 
-        {/* 2. Milestone Status */}
         <div className="bg-white rounded-xl border border-slate-200/90 py-1 px-2.5 shadow-2xs">
           <div className="text-[10px] font-medium text-slate-500">Milestone Status</div>
           <div className="mt-0.5">
@@ -566,7 +571,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
         </div>
 
-        {/* 3. Total Tasks */}
         <div className="bg-white rounded-xl border border-slate-200/90 py-1 px-2.5 shadow-2xs">
           <div className="text-[10px] font-medium text-slate-500">Total Tasks</div>
           <div className="text-sm font-extrabold text-slate-900 font-mono mt-0.5 leading-tight">
@@ -581,7 +585,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
         </div>
 
-        {/* 4. Start Date */}
         <div className="bg-white rounded-xl border border-slate-200/90 py-1 px-2.5 shadow-2xs">
           <div className="text-[10px] font-medium text-slate-500">Start Date</div>
           <div className="text-xs font-bold text-slate-900 truncate mt-0.5 leading-tight">
@@ -592,7 +595,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
         </div>
 
-        {/* 5. End Date */}
         <div className="bg-white rounded-xl border border-slate-200/90 py-1 px-2.5 shadow-2xs">
           <div className="text-[10px] font-medium text-slate-500">End Date</div>
           <div className="text-xs font-bold text-slate-900 truncate mt-0.5 leading-tight">
@@ -605,7 +607,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
       </div>
 
       {/* 5. Overall Task Progress (Horizontal Segmented Bar Card) */}
-      <div 
+      <div
         id="overall-task-progress-card"
         className="bg-white rounded-xl border border-slate-200/90 px-3.5 py-2 shadow-2xs shrink-0"
       >
@@ -636,7 +638,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
         </div>
 
-        {/* Segmented Progress Bar (10 equal segments) */}
         <div className="flex items-center gap-1.5 w-full">
           {Array.from({ length: 10 }).map((_, idx) => {
             const segmentThreshold = (idx + 1) * 10;
@@ -644,7 +645,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             const isPartial = calculatedCompletion > idx * 10 && calculatedCompletion < segmentThreshold;
 
             return (
-              <div 
+              <div
                 key={idx}
                 className={`flex-1 h-3 rounded-sm transition-all duration-300 relative overflow-hidden ${
                   isFull
@@ -656,7 +657,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                 title={`Segment ${idx + 1}: ${idx * 10}% to ${segmentThreshold}%`}
               >
                 {isPartial && (
-                  <div 
+                  <div
                     className="h-full bg-blue-600 rounded-sm"
                     style={{ width: `${((calculatedCompletion - idx * 10) / 10) * 100}%` }}
                   />
@@ -676,13 +677,11 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
 
       {/* 6. Stable Two-Column Grid: LEFT (Task Timeline) + RIGHT (Milestone Information) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3 lg:overflow-hidden">
-        
         {/* LEFT COLUMN: Task Timeline (8 cols) */}
-        <div 
+        <div
           id="milestone-tasks-timeline-card"
           className="col-span-1 lg:col-span-8 min-w-0 min-h-[280px] lg:min-h-0 h-full bg-white rounded-xl border border-slate-200/90 flex flex-col overflow-hidden shadow-2xs"
         >
-          {/* Timeline Header & Filter Controls */}
           <div className="px-3 py-1.5 border-b border-slate-100 shrink-0 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-2 min-w-0">
               <h3 className="text-xs font-bold text-slate-900 tracking-tight shrink-0">
@@ -709,7 +708,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             </div>
           </div>
 
-          {/* Task List / Connected Vertical Timeline */}
           <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
             {filteredTasks.length > 0 ? (
               <div className="relative pl-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
@@ -717,11 +715,15 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                   const isCompleted = task.status === 'Completed' || task.progress === 100;
                   const isInProgress = task.status === 'In Progress';
                   const isAtRisk = task.status === 'At Risk';
-                  const isOverdueTask = isTaskOverdue(task);
+                  const { isSelfOverdue: isOverdueTask } = getTaskOverdueInfo(task);
+                  const isHighlighted = highlightTaskId === task.id;
 
                   return (
-                    <div key={task.id} className="relative mb-3 last:mb-0">
-                      {/* Connected Vertical Timeline Node */}
+                    <div
+                      key={task.id}
+                      id={`milestone-task-card-${task.id}`}
+                      className="relative mb-3 last:mb-0"
+                    >
                       <div className="absolute -left-6 top-3 -translate-x-1/2 flex items-center justify-center z-10">
                         {isCompleted ? (
                           <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center ring-4 ring-white shadow-xs">
@@ -742,16 +744,14 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                         )}
                       </div>
 
-                      {/* Task Card */}
                       <div
                         data-overdue={isOverdueTask ? 'true' : undefined}
                         className={`rounded-xl border p-3 shadow-2xs transition-all hover:shadow-xs ${
                           isOverdueTask
-                            ? 'bg-rose-50 border-rose-300 border-l-4 border-l-rose-500 hover:border-rose-400'
+                            ? 'bg-rose-50 border-rose-300 border-l-4 border-l-rose-500 outline outline-2 -outline-offset-2 outline-rose-400 hover:border-rose-400'
                             : 'bg-white border-slate-200/90 hover:border-blue-300'
-                        }`}
+                        } ${isHighlighted ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
                       >
-                        {/* Header: Task Number, Name, Status, Weightage */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
@@ -783,19 +783,18 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                           </div>
                         </div>
 
-                        {/* Progress Bar & Schedule row */}
                         <div className="grid grid-cols-12 gap-3 items-center mt-2.5 pt-2 border-t border-slate-100 text-xs">
                           <div className="col-span-7 flex items-center gap-2">
                             <span className="text-[10px] font-medium text-slate-500 w-14 shrink-0">
                               Progress:
                             </span>
                             <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
-                              <div 
+                              <div
                                 className={`h-full rounded-full transition-all duration-300 ${
-                                  task.progress === 100 
-                                    ? 'bg-emerald-500' 
-                                    : task.progress === 0 
-                                      ? 'bg-slate-200' 
+                                  task.progress === 100
+                                    ? 'bg-emerald-500'
+                                    : task.progress === 0
+                                      ? 'bg-slate-200'
                                       : 'bg-blue-600'
                                 }`}
                                 style={{ width: `${task.progress}%` }}
@@ -814,7 +813,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                           </div>
                         </div>
 
-                        {/* changes done by vb */}
                         {(() => {
                           const isOpen = !!openActivityIds[task.id];
                           const state = taskActivity[task.id];
@@ -906,7 +904,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
         </div>
 
         {/* RIGHT COLUMN: Milestone Information Panel (4 cols) */}
-        <div 
+        <div
           id="milestone-information-card"
           className="col-span-1 lg:col-span-4 min-w-0 min-h-[280px] lg:min-h-0 h-full bg-white rounded-xl border border-slate-200/90 flex flex-col overflow-hidden shadow-2xs"
         >
@@ -921,7 +919,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 scrollbar-thin">
-            {/* 1. Milestone Name */}
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                 Milestone Name
@@ -931,7 +928,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
               </div>
             </div>
 
-            {/* 2. Scope & Deliverables */}
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                 Scope & Deliverables
@@ -941,7 +937,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
               </p>
             </div>
 
-            {/* 3. Location & Assigned Team */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/70">
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Location</span>
@@ -957,7 +952,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
               </div>
             </div>
 
-            {/* 4. Dates */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/70">
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Start Date</span>
@@ -973,8 +967,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
               </div>
             </div>
 
-            {/* 5. Milestone Notes & Field Activity */}
-            <div 
+            <div
               id="milestone-field-notes-card"
               className="bg-[#F0F6FF] rounded-xl border border-blue-200/90 flex flex-col overflow-hidden shadow-2xs mt-1"
             >
@@ -1024,7 +1017,7 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
                 )}
               </div>
 
-              <form 
+              <form
                 onSubmit={handlePostMilestoneNote}
                 className="p-2.5 bg-white/95 border-t border-blue-200/80 shrink-0 flex flex-col gap-1.5"
               >
@@ -1058,7 +1051,6 @@ export const MilestoneTasksView: React.FC<MilestoneTasksViewProps> = ({
             </div>
           </div>
         </div>
-
       </div>
 
       {/* Add Task Modal */}

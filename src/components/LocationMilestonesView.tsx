@@ -14,7 +14,11 @@ import {
   Eye
 } from 'lucide-react';
 import { ProjectItem, ProjectLocation, LocationMilestone, LocationComment } from '../types';
-import { isMilestoneOverdue, isOverdue, isTaskOverdue } from '../utils/overdue';
+import {
+  getLocationOverdueInfo,
+  getMilestoneOverdueInfo,
+} from '../utils/overdueHierarchy';
+import { OverdueDot } from './OverdueDot';
 import {
   getLocationComments,
   createLocationComment,
@@ -59,13 +63,9 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
   onUpdateProjectLocation,
   currentUser
 }) => {
-  // Selected location ID controlled within the project
   const [selectedLocationId, setSelectedLocationId] = useState<string>(initialLocation.id);
-
-  // Detail inspection state
   const [inspectingMilestone, setInspectingMilestone] = useState<LocationMilestone | null>(null);
 
-  // Sync if initialLocation changes from outside
   useEffect(() => {
     setSelectedLocationId(initialLocation.id);
   }, [initialLocation.id]);
@@ -77,19 +77,16 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     }
   };
 
-  // All locations for this project
   const locations = useMemo(() => {
     return project.locations && project.locations.length > 0
       ? project.locations
       : [initialLocation];
   }, [project.locations, initialLocation]);
 
-  // Current active location object
   const activeLocation = useMemo(() => {
     return locations.find(l => l.id === selectedLocationId) || initialLocation;
   }, [locations, selectedLocationId, initialLocation]);
 
-  // Horizontal scroll container refs and handlers
   const locationScrollRef = useRef<HTMLDivElement>(null);
   const isDraggingLocationRef = useRef(false);
   const startXLocationRef = useRef(0);
@@ -125,7 +122,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     isDraggingLocationRef.current = false;
   };
 
-  // Center selected location in selector view when location changes
   useEffect(() => {
     if (!locationScrollRef.current) return;
     const activeEl = locationScrollRef.current.querySelector<HTMLElement>(`#location-pill-${activeLocation.id}`);
@@ -134,11 +130,9 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     }
   }, [activeLocation.id]);
 
-  // Local state for interactive milestones and comments per location
   const [locationMilestonesMap, setLocationMilestonesMap] = useState<Record<string, LocationMilestone[]>>({});
   const [locationCommentsMap, setLocationCommentsMap] = useState<Record<string, LocationComment[]>>({});
 
-  // Always use real API milestones from activeLocation (never mock fallback)
   const activeMilestones = useMemo(() => {
     if (locationMilestonesMap[activeLocation.id]) {
       return locationMilestonesMap[activeLocation.id];
@@ -146,13 +140,11 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     return Array.isArray(activeLocation.milestones) ? activeLocation.milestones : [];
   }, [locationMilestonesMap, activeLocation]);
 
-  // Comments are loaded from the FastAPI backend for the selected location.
   const activeComments = locationCommentsMap[activeLocation.id] ?? [];
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState<string | null>(null);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
 
-  // Comment posting state
   const [newCommentText, setNewCommentText] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
@@ -198,7 +190,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     };
   }, [activeLocation.id]);
 
-  // Milestone edit/action state
   const [statusFilter, setStatusFilter] = useState<'All' | 'Completed' | 'In Progress' | 'Pending'>('All');
   const [showAddMilestoneModal, setShowAddMilestoneModal] = useState(false);
   const [newMilestoneName, setNewMilestoneName] = useState('');
@@ -206,13 +197,11 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
   const [newMilestoneStart, setNewMilestoneStart] = useState('');
   const [newMilestoneEnd, setNewMilestoneEnd] = useState('');
 
-  // Milestone statistics
   const completedMilestones = activeMilestones.filter(
     m => m.status === 'Completed' || m.progress >= 100
   ).length;
   const totalMilestones = activeMilestones.length;
 
-  // Handle Post Comment
   const handlePostComment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
@@ -255,7 +244,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     }
   };
 
-  // Handle Save Edited Comment
   const handleSaveEditComment = async (commentId: string) => {
     const commentText = editingText.trim();
     if (!commentText || commentSubmitting) return;
@@ -296,7 +284,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     }
   };
 
-  // Handle Delete Comment
   const handleDeleteComment = async (commentId: string) => {
     if (commentSubmitting) return;
 
@@ -334,7 +321,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     }
   };
 
-  // Handle Milestone Status Change
   const handleUpdateMilestoneStatus = (milestoneId: string, nextStatus: LocationMilestone['status']) => {
     const updatedMilestones = activeMilestones.map(m => {
       if (m.id === milestoneId) {
@@ -368,7 +354,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     }
   };
 
-  // Handle Add New Milestone
   const handleAddMilestone = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMilestoneName.trim()) return;
@@ -404,7 +389,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     setNewMilestoneEnd('');
   };
 
-  // Render Status Pill
   const renderStatusPill = (status: string) => {
     switch (status) {
       case 'Completed':
@@ -446,16 +430,15 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
     }
   };
 
-  // Filtered Milestones
   const filteredMilestones = useMemo(() => {
     if (statusFilter === 'All') return activeMilestones;
     return activeMilestones.filter(m => m.status === statusFilter);
   }, [activeMilestones, statusFilter]);
 
   return (
-    <div 
+    <div
       id="location-milestones-viewport"
-      className="flex-1 min-h-[calc(100dvh-56px)] overflow-y-auto flex flex-col bg-[#F4F6F9] px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 gap-2 sm:gap-2.5 select-none" /* changes done by vb */
+      className="flex-1 min-h-[calc(100dvh-56px)] overflow-y-auto flex flex-col bg-[#F4F6F9] px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 gap-2 sm:gap-2.5 select-none"
     >
       {/* 1. Breadcrumbs + Navigation Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
@@ -469,21 +452,21 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             <span>Back to Project Tracking</span>
           </button>
           <span className="text-slate-300">|</span>
-          <button 
+          <button
             onClick={onBackToDashboard}
             className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer font-medium"
           >
             Dashboard
           </button>
           <span className="text-slate-300">/</span>
-          <button 
+          <button
             onClick={onBackToTracking}
             className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer font-medium"
           >
             Projects
           </button>
           <span className="text-slate-300">/</span>
-          <button 
+          <button
             onClick={onBackToTracking}
             className="text-slate-700 hover:text-blue-700 transition-colors cursor-pointer font-semibold"
           >
@@ -499,7 +482,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
       </div>
 
       {/* 2. Top Location Selector Bar */}
-      <div 
+      <div
         id="top-location-selector-bar"
         className="bg-white rounded-xl border border-slate-200/90 px-3.5 py-1.5 flex items-center justify-between shadow-2xs shrink-0 gap-3 overflow-hidden"
       >
@@ -507,7 +490,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pr-1 shrink-0 select-none">
             Locations:
           </span>
-          <div 
+          <div
             id="location-selector-scroll-container"
             ref={locationScrollRef}
             onWheel={handleLocationWheel}
@@ -515,7 +498,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             onMouseMove={handleLocationMouseMove}
             onMouseUp={handleLocationMouseUp}
             onMouseLeave={handleLocationMouseUp}
-            className="flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-none flex-nowrap w-full select-none py-0.5 scroll-x-visible" /* changes done by vb */
+            className="flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-none flex-nowrap w-full select-none py-0.5 scroll-x-visible"
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
@@ -524,6 +507,8 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
           >
             {locations.map((loc, idx) => {
               const isSelected = loc.id === activeLocation.id;
+              const locInfo = getLocationOverdueInfo(loc, project.id);
+
               return (
                 <React.Fragment key={loc.id}>
                   {idx > 0 && (
@@ -542,16 +527,31 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                       isSelected
                         ? 'bg-blue-600 text-white shadow-xs hover:bg-blue-700 ring-2 ring-blue-600/20'
                         : 'bg-slate-50 text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200/90 hover:border-slate-300'
+                    } ${
+                      locInfo.isSelfOverdue
+                        ? 'outline outline-2 outline-rose-500'
+                        : ''
                     }`}
                   >
                     <span className="flex items-center gap-1.5 whitespace-nowrap">
-                      <span 
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          loc.progress === 100 
-                            ? isSelected ? 'bg-emerald-300 ring-2 ring-white/30' : 'bg-emerald-500'
-                            : isSelected ? 'bg-sky-200' : 'bg-blue-500'
-                        }`} 
-                      />
+                      {locInfo.hasAnyOverdue && (
+                        <OverdueDot
+                          title={
+                            locInfo.firstTarget?.label ||
+                            `Overdue item in ${loc.city}`
+                          }
+                          onLightBg={!isSelected}
+                        />
+                      )}
+                      {!locInfo.hasAnyOverdue && (
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            loc.progress === 100
+                              ? isSelected ? 'bg-emerald-300 ring-2 ring-white/30' : 'bg-emerald-500'
+                              : isSelected ? 'bg-sky-200' : 'bg-blue-500'
+                          }`}
+                        />
+                      )}
                       <span>{loc.city}</span>
                       {(loc.countryCode || loc.country) && (
                         <span className={`text-[10px] font-normal ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
@@ -560,7 +560,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                       )}
                     </span>
 
-                    <span 
+                    <span
                       className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full leading-none shrink-0 ${
                         isSelected
                           ? 'bg-white/20 text-white'
@@ -585,7 +585,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
       </div>
 
       {/* 3. Header */}
-      <div 
+      <div
         id="location-milestones-header"
         className="bg-[#F2F7FF] rounded-xl border border-blue-100 px-3.5 py-1.5 flex items-center justify-between shadow-2xs shrink-0"
       >
@@ -629,7 +629,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div className="w-24 h-1.5 bg-slate-200/80 rounded-full overflow-hidden border border-slate-200">
-                <div 
+                <div
                   className={`h-full rounded-full transition-all duration-500 ${
                     activeLocation.progress === 100 ? 'bg-emerald-500' : 'bg-blue-600'
                   }`}
@@ -655,7 +655,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             </span>
           </div>
           <div className="w-full bg-slate-100 h-1 rounded-full mt-1 overflow-hidden">
-            <div 
+            <div
               className={`h-full rounded-full transition-all duration-500 ${
                 activeLocation.progress === 100 ? 'bg-emerald-500' : 'bg-blue-600'
               }`}
@@ -712,7 +712,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
       </div>
 
       {/* 5. Milestone Progress & Horizontal Lifecycle Timeline */}
-      <div 
+      <div
         id="location-milestone-timeline-card"
         className="bg-white rounded-xl border border-slate-200/90 px-4 py-3 shadow-2xs shrink-0"
       >
@@ -732,33 +732,33 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
 
         <div className="relative pt-2 pb-1 px-3">
           <div className="relative h-3 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
-            <div 
+            <div
               className="h-full rounded-full flex overflow-hidden transition-all duration-500"
               style={{ width: `${activeLocation.progress}%` }}
             >
-              <div 
-                style={{ width: `${Math.min(100, (25 / Math.max(1, activeLocation.progress)) * 100)}%` }} 
-                className="h-full bg-sky-200 border-r border-white/40" 
+              <div
+                style={{ width: `${Math.min(100, (25 / Math.max(1, activeLocation.progress)) * 100)}%` }}
+                className="h-full bg-sky-200 border-r border-white/40"
                 title="0-25% Initiation"
               />
               {activeLocation.progress > 25 && (
-                <div 
-                  style={{ width: `${Math.min(100, ((Math.min(50, activeLocation.progress) - 25) / activeLocation.progress) * 100)}%` }} 
-                  className="h-full bg-sky-300 border-r border-white/40" 
+                <div
+                  style={{ width: `${Math.min(100, ((Math.min(50, activeLocation.progress) - 25) / activeLocation.progress) * 100)}%` }}
+                  className="h-full bg-sky-300 border-r border-white/40"
                   title="25-50% Planning & Design"
                 />
               )}
               {activeLocation.progress > 50 && (
-                <div 
-                  style={{ width: `${Math.min(100, ((Math.min(75, activeLocation.progress) - 50) / activeLocation.progress) * 100)}%` }} 
-                  className="h-full bg-blue-400 border-r border-white/40" 
+                <div
+                  style={{ width: `${Math.min(100, ((Math.min(75, activeLocation.progress) - 50) / activeLocation.progress) * 100)}%` }}
+                  className="h-full bg-blue-400 border-r border-white/40"
                   title="50-75% Implementation"
                 />
               )}
               {activeLocation.progress > 75 && (
-                <div 
-                  style={{ width: `${Math.min(100, ((activeLocation.progress - 75) / activeLocation.progress) * 100)}%` }} 
-                  className="h-full bg-blue-600" 
+                <div
+                  style={{ width: `${Math.min(100, ((activeLocation.progress - 75) / activeLocation.progress) * 100)}%` }}
+                  className="h-full bg-blue-600"
                   title="75-100% Completion"
                 />
               )}
@@ -778,8 +778,8 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
               const isCurrent = Math.abs(activeLocation.progress - node.percent) <= 12;
 
               return (
-                <div 
-                  key={node.percent} 
+                <div
+                  key={node.percent}
                   className="flex flex-col items-center -translate-y-1"
                 >
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 shadow-xs transition-colors ${
@@ -802,7 +802,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             })}
           </div>
 
-          {/* changes done by vb */}
           <div className="flex justify-between mx-0.5 mt-2.5 text-[10px] font-semibold text-slate-800">
             {[0, 25, 50, 75, 100].map((p) => (
               <div key={p} className="w-5 flex justify-center">
@@ -815,9 +814,8 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
 
       {/* 6. Stable Two-Column Grid: Milestone Table (Left) + Comments Card (Right) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3">
-        
         {/* LEFT SIDE: Milestone Table */}
-        <div 
+        <div
           id="location-milestones-table-card"
           className="col-span-1 lg:col-span-8 min-w-0 min-h-[300px] h-auto lg:h-full bg-white rounded-xl border border-slate-200/90 flex flex-col overflow-hidden shadow-2xs"
         >
@@ -846,7 +844,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto no-scrollbar scroll-x-visible" /* changes done by vb */>
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto no-scrollbar scroll-x-visible">
             {filteredMilestones.length > 0 ? (
               <table className="w-full text-left text-xs border-collapse min-w-[560px]">
                 <thead>
@@ -862,36 +860,57 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredMilestones.map((milestone) => {
-                    const overdue = isMilestoneOverdue(milestone);
-                    const ownDateOverdue = isOverdue(milestone.endDate, milestone.status, milestone.progress);
-                    const overdueTasks = (milestone.tasks || []).filter(isTaskOverdue).length;
+                    const mInfo = getMilestoneOverdueInfo(
+                      milestone,
+                      project.id,
+                      activeLocation.id
+                    );
+
+                    const openMilestoneTasks = () => {
+                      if (onViewMilestoneTasks) {
+                        onViewMilestoneTasks(milestone);
+                      } else {
+                        setInspectingMilestone(milestone);
+                      }
+                    };
+
                     return (
                       <tr
                         key={milestone.id}
-                        data-overdue={overdue ? 'true' : undefined}
+                        data-overdue={mInfo.hasAnyOverdue ? 'true' : undefined}
                         className={`transition-colors group ${
-                          overdue
-                            ? 'bg-rose-50 hover:bg-rose-100/70 outline outline-2 -outline-offset-2 outline-rose-300'
+                          mInfo.isSelfOverdue
+                            ? 'bg-rose-50 hover:bg-rose-100/70 outline outline-2 -outline-offset-2 outline-rose-400'
                             : 'hover:bg-slate-50/70'
                         }`}
                       >
-                        <td className={`py-2 px-3 font-semibold text-slate-900 align-top ${overdue ? 'border-l-4 border-rose-500' : ''}`}>
+                        <td className={`py-2 px-3 font-semibold text-slate-900 align-top ${mInfo.isSelfOverdue ? 'border-l-4 border-rose-500' : ''}`}>
                           <div className="flex items-start gap-1.5">
+                            {mInfo.hasOverdueTask && (
+                              <OverdueDot
+                                title={`${mInfo.overdueTaskCount} overdue task${
+                                  mInfo.overdueTaskCount === 1 ? '' : 's'
+                                } in ${milestone.name} — click to view tasks`}
+                                onLightBg={true}
+                                className="mt-1"
+                                onClick={openMilestoneTasks}
+                              />
+                            )}
                             {milestone.status === 'Completed' ? (
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                             ) : milestone.status === 'In Progress' ? (
-                              <Clock className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${overdue ? 'text-rose-600' : 'text-blue-600'}`} />
+                              <Clock className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${mInfo.isSelfOverdue ? 'text-rose-600' : 'text-blue-600'}`} />
                             ) : (
-                              <div className={`w-3.5 h-3.5 rounded-full border shrink-0 mt-0.5 ${overdue ? 'border-rose-500' : 'border-slate-300'}`} />
+                              <div className={`w-3.5 h-3.5 rounded-full border shrink-0 mt-0.5 ${mInfo.isSelfOverdue ? 'border-rose-500' : 'border-slate-300'}`} />
                             )}
                             <div className="min-w-0">
-                              <span className={`font-semibold leading-snug ${overdue ? 'text-rose-800' : 'text-slate-800'}`}>
+                              <span className={`font-semibold leading-snug ${mInfo.isSelfOverdue ? 'text-rose-800' : 'text-slate-800'}`}>
                                 {milestone.name}
                               </span>
-                              {overdue && (
+                              {mInfo.isSelfOverdue && (
                                 <span className="mt-1 flex w-fit items-center gap-1 rounded-full bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
                                   <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                                  {ownDateOverdue ? 'Overdue' : `${overdueTasks} task${overdueTasks === 1 ? '' : 's'} overdue`}
+                                  Overdue
                                 </span>
                               )}
                             </div>
@@ -903,7 +922,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                         <td className="py-2 px-2.5 text-slate-700 font-mono text-[11px] whitespace-nowrap align-top">
                           {formatDisplayDate(milestone.startDate)}
                         </td>
-                        <td className={`py-2 px-2.5 font-mono text-[11px] whitespace-nowrap align-top ${ownDateOverdue ? 'text-rose-700 font-bold' : 'text-slate-700'}`}>
+                        <td className={`py-2 px-2.5 font-mono text-[11px] whitespace-nowrap align-top ${mInfo.isSelfOverdue ? 'text-rose-700 font-bold' : 'text-slate-700'}`}>
                           {formatDisplayDate(milestone.endDate)}
                         </td>
                         <td className="py-2 px-2.5 whitespace-nowrap align-top">
@@ -912,10 +931,10 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                         <td className="py-2 px-2.5 align-top">
                           <div className="flex items-center gap-1.5 pt-0.5">
                             <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
+                              <div
                                 className={`h-full rounded-full ${
-                                  milestone.progress === 100 
-                                    ? 'bg-emerald-500' 
+                                  milestone.progress === 100
+                                    ? 'bg-emerald-500'
                                     : milestone.progress === 0
                                       ? 'bg-slate-200'
                                       : 'bg-blue-600'
@@ -931,13 +950,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                         <td className="py-2 px-3 text-right whitespace-nowrap align-top">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => {
-                                if (onViewMilestoneTasks) {
-                                  onViewMilestoneTasks(milestone);
-                                } else {
-                                  setInspectingMilestone(milestone);
-                                }
-                              }}
+                              onClick={openMilestoneTasks}
                               id={`btn-view-milestone-${milestone.id}`}
                               className="px-2 py-0.5 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 rounded transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
                               title="View Task Timeline"
@@ -981,7 +994,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
         </div>
 
         {/* RIGHT SIDE: Comments Card */}
-        <div 
+        <div
           id="location-comments-card"
           className="col-span-1 lg:col-span-4 min-w-0 min-h-[300px] h-auto lg:h-full bg-[#F0F6FF] rounded-xl border border-blue-200/90 flex flex-col overflow-hidden shadow-2xs"
         >
@@ -1016,7 +1029,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                 )}
                 {activeComments.length > 0 ? (
                   activeComments.map((comment) => (
-                    <div 
+                    <div
                       key={comment.id}
                       className="bg-white rounded-lg border border-blue-100 p-2.5 shadow-2xs text-xs space-y-1.5 transition-all hover:border-blue-200"
                     >
@@ -1109,7 +1122,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             )}
           </div>
 
-          <form 
+          <form
             onSubmit={handlePostComment}
             className="p-2.5 bg-white/95 border-t border-blue-200/80 shrink-0 flex flex-col gap-1.5"
           >
@@ -1129,7 +1142,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                 }}
               />
             </div>
-            
+
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-500">
                 Posting as <strong className="text-slate-700">{currentUser}</strong>
@@ -1145,7 +1158,6 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
             </div>
           </form>
         </div>
-
       </div>
 
       {/* Add Milestone Modal */}
@@ -1162,7 +1174,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                   <p className="text-[11px] text-slate-500">{project.name} · Location Checkpoint</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowAddMilestoneModal(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
@@ -1245,7 +1257,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
 
       {/* Milestone Details Inspection Modal */}
       {inspectingMilestone && (
-        <div 
+        <div
           id="milestone-details-modal"
           className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4"
         >
@@ -1313,7 +1325,7 @@ export const LocationMilestonesView: React.FC<LocationMilestonesViewProps> = ({
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Progress</span>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className={`h-full rounded-full ${inspectingMilestone.progress === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`}
                         style={{ width: `${inspectingMilestone.progress}%` }}
                       />

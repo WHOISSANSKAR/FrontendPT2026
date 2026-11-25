@@ -60,10 +60,17 @@ const getAuthHeaders = (): HeadersInit => {
 const normalizeOrderStatus = (rawStatus: string): OrderItem["status"] => {
   const s = String(rawStatus || "").trim().toLowerCase();
   if (s === "delivered" || s === "completed") return "Delivered";
-  if (s === "processing" || s === "in progress" || s === "dispatched" || s === "shipped") {
+  if (
+    s === "processing" ||
+    s === "in progress" ||
+    s === "dispatched" ||
+    s === "shipped"
+  ) {
     return "Processing";
   }
-  if (s === "cancelled" || s === "canceled" || s === "rejected") return "Cancelled";
+  if (s === "cancelled" || s === "canceled" || s === "rejected") {
+    return "Cancelled";
+  }
   return "Pending";
 };
 
@@ -216,7 +223,9 @@ type CamelCaseOrderRow = {
   updatedAt?: string | null;
 };
 
-const toRawOrderRow = (row: OrderPlacedApiRow | CamelCaseOrderRow): OrderPlacedApiRow => {
+const toRawOrderRow = (
+  row: OrderPlacedApiRow | CamelCaseOrderRow
+): OrderPlacedApiRow => {
   // Already in raw column format → leave exactly as it is.
   if (row && typeof row === "object" && "ordplcd_order_no" in row) {
     return row as OrderPlacedApiRow;
@@ -250,7 +259,7 @@ const toRawOrderRow = (row: OrderPlacedApiRow | CamelCaseOrderRow): OrderPlacedA
 };
 
 export const getCustomerOrders = async (): Promise<MappedOrderItem[]> => {
-  const response = await fetch(`${API_BASE_URL}${API_PREFIX}/orders`, {
+  const response = await fetch(`${API_BASE_URL}${API_PREFIX}/orders/`, {
     method: "GET",
     headers: getAuthHeaders(),
     credentials: "include",

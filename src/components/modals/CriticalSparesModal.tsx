@@ -9,6 +9,7 @@ interface CriticalSparesModalProps {
   spares: CriticalSpareItem[];
   cart?: CartItem[];
   onAddToCart: (spare: CriticalSpareItem, quantity: number) => void;
+  onOpenCart?: () => void;
 }
 
 export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
@@ -16,7 +17,8 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
   onClose,
   spares,
   cart = [],
-  onAddToCart
+  onAddToCart,
+  onOpenCart
 }) => {
   const [filter, setFilter] = useState<string>('All');
   const [search, setSearch] = useState('');
@@ -60,6 +62,8 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
     return matchesFilter && matchesSearch;
   });
 
+  const totalCartItems = cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
   const handleRequest = (sp: CriticalSpareItem, qty?: number) => {
     const remaining = getRemainingStock(sp);
     if (remaining <= 0) return;
@@ -88,12 +92,31 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
               <p className="text-[11px] text-slate-500">Live warehouse telemetry & emergency procurement</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenCart && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenCart();
+                }}
+                className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span>View Cart</span>
+                {totalCartItems > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-blue-500 text-white text-[10px] font-bold">
+                    {totalCartItems}
+                  </span>
+                )}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Filter Bar */}
@@ -109,7 +132,7 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 scroll-x-visible" /* changes done by vb */>
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 scroll-x-visible">
             {['All', 'Critical', 'Low Stock', 'Pending'].map((st) => (
               <button
                 key={st}
@@ -128,7 +151,7 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
 
         {/* Spares Table */}
         <div
-          className="flex-1 overflow-y-auto overflow-x-auto no-scrollbar scrollbar-none scroll-x-visible" /* changes done by vb */
+          className="flex-1 overflow-y-auto overflow-x-auto no-scrollbar scrollbar-none scroll-x-visible"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           <table className="w-full text-left text-xs border-collapse min-w-[720px]">
@@ -147,6 +170,7 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredSpares.map((sp) => {
                 const availableStock = getAvailableStock(sp);
+                const inCartQty = getCartQty(sp.id);
                 const remainingStock = getRemainingStock(sp);
                 const isOutOfStock = availableStock <= 0;
                 const isMaxInCart = !isOutOfStock && remainingStock <= 0;
@@ -155,7 +179,14 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
                   <tr key={sp.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-2.5 px-4">
                       <div className="font-semibold text-slate-900 leading-tight">{sp.name}</div>
-                      <div className="font-mono text-[10px] text-slate-400 mt-0.5">{sp.partNumber}</div>
+                      <div className="font-mono text-[10px] text-slate-400 mt-0.5">
+                        {sp.partNumber}
+                        {inCartQty > 0 && (
+                          <span className="ml-2 text-blue-600 font-sans font-semibold">
+                            • {inCartQty} in cart
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2.5 px-3 text-slate-600 font-medium">
                       {sp.category}
@@ -227,7 +258,7 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
                         ) : (
                           <>
                             <ShoppingCart className="w-3 h-3" />
-                            <span>Request Spare</span>
+                            <span>Add to Cart</span>
                           </>
                         )}
                       </button>
@@ -241,8 +272,21 @@ export const CriticalSparesModal: React.FC<CriticalSparesModalProps> = ({
 
         {/* Footer */}
         <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
-          <span>Choose a quantity, then Request Spare to add it to your Enterprise Requisition Cart</span>
-          <span className="font-semibold text-slate-700">{filteredSpares.length} components listed</span>
+          <span>Choose a quantity and click Add to Cart — open View Cart when ready to checkout</span>
+          <div className="flex items-center gap-3">
+            <span className="font-semibold text-slate-700">{filteredSpares.length} components listed</span>
+            {onOpenCart && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenCart();
+                }}
+                className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+              >
+                Open Cart ({cart.length}) →
+              </button>
+            )}
+          </div>
         </div>
 
       </div>

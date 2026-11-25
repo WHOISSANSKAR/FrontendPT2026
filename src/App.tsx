@@ -7,26 +7,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 // Everything comes from the backend/database; screens show empty states until data loads.
 
 import {
-
   ProjectItem,
-
   ProjectLocation,
-
   LocationMilestone,
-
   CriticalSpareItem,
-
   SupportTicketItem,
-
   OrderItem,
-
   CartItem,
-
   NotificationItem,
-
   CalendarEventItem
-
 } from './types';
+import type { OverdueNavigationTarget } from './utils/overdueHierarchy';
 
 // Components
 
@@ -140,17 +131,71 @@ import type { TodoApiItem } from './services/todo.service';
 // Session helpers
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
 
-const getJwtExpiryMs = (token: string | null): number | null => {
+const decodeJwtPayload = (token: string | null): Record<string, any> | null => {
   if (!token) return null;
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-    const payload = JSON.parse(atob(padded));
-    return typeof payload?.exp === 'number' ? payload.exp * 1000 : null;
+    return JSON.parse(atob(padded));
   } catch {
     return null;
+  }
+};
+
+const getJwtExpiryMs = (token: string | null): number | null => {
+  const payload = decodeJwtPayload(token);
+  return typeof payload?.exp === 'number' ? payload.exp * 1000 : null;
+};
+
+const getCartStorageKey = (hint?: string | null): string => {
+  if (typeof window === 'undefined') return 'pseudoteam_cart';
+  const token = localStorage.getItem('auth_token');
+  const payload = decodeJwtPayload(token);
+  const tokenUserKey =
+    payload?.pown_id ??
+    payload?.customer_id ??
+    payload?.user_id ??
+    payload?.sub ??
+    payload?.email;
+  if (tokenUserKey) {
+    return `pseudoteam_cart_${String(tokenUserKey).trim().toLowerCase()}`;
+  }
+  const candidate =
+    hint ||
+    localStorage.getItem('customer_email') ||
+    localStorage.getItem('customer_name');
+  if (candidate && candidate.trim()) {
+    return `pseudoteam_cart_${candidate.trim().toLowerCase()}`;
+  }
+  return 'pseudoteam_cart';
+};
+
+const readCartFromStorage = (hint?: string | null): CartItem[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const scopedKey = getCartStorageKey(hint);
+    const saved = localStorage.getItem(scopedKey);
+    if (saved) return JSON.parse(saved);
+    const legacy = localStorage.getItem('pseudoteam_cart');
+    return legacy ? JSON.parse(legacy) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeCartToStorage = (items: CartItem[], hint?: string | null): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    const serialized = JSON.stringify(items);
+    const scopedKey = getCartStorageKey(hint);
+    localStorage.setItem(scopedKey, serialized);
+    if (scopedKey !== 'pseudoteam_cart') {
+      localStorage.setItem('pseudoteam_cart', serialized);
+    }
+  } catch {
+    // ignore storage quota errors
   }
 };
 
@@ -190,6 +235,7 @@ const EMPTY_PROJECT: ProjectItem = {
   customer: '',
   category: '',
   status: 'Not Started',
+  plistStatus: undefined,
   progress: 0,
   currentPhase: '',
   velocity: '',
@@ -206,42 +252,22 @@ const EMPTY_PROJECT: ProjectItem = {
 };
 
 export const App: React.FC = () => {
-
   const location = useLocation();
-
   const navigate = useNavigate();
 
   // Authentication State: check localStorage and current path
-
-  // const [isAuthenticated, setIsAuthenticated] = useState(() => {
-
-  //   if (typeof window === 'undefined') return true;
-
-  //   if (window.location.pathname === '/login') return false;
-
-  //   const stored = localStorage.getItem('pseudoteam_authenticated');
-
-  //   return stored !== 'false';
-
-  // });
-
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-
     if (typeof window === 'undefined') return false;
 
     // changes done by vb: /signup also shows the auth screen
     if (window.location.pathname === '/login' || window.location.pathname === '/signup') {
-
       return false;
-
     }
 
     return hasValidSessionToken();
-
   });
 
   // Navigation & View State
-
   const [currentView, setCurrentView] = useState<'dashboard' | 'tracking' | 'upload' | 'spares' | 'tickets' | 'ticket-details' | 'orders' | 'location-milestones' | 'milestone-tasks' | 'account' | 'help'>('dashboard');
 
   const [userProfileData, setUserProfileData] = useState<UserProfileData | undefined>(undefined);
@@ -261,7 +287,6 @@ export const App: React.FC = () => {
   const [openTicketModalInitially, setOpenTicketModalInitially] = useState(false);
 
   // Core Data State
-
   // changes done by vb: start empty (was INITIAL_PROJECTS mock data); filled from the dashboard API
   const [projects, setProjects] = useState<ProjectItem[]>([]);
 
@@ -273,79 +298,44 @@ export const App: React.FC = () => {
   const [sparesLoading, setSparesLoading] = useState(false);
   const [sparesError, setSparesError] = useState<string | null>(null);
 
-  // const [tickets, setTickets] = useState<SupportTicketItem[]>(INITIAL_TICKETS);
-
   const [tickets, setTickets] = useState<SupportTicketItem[]>([]);
 
-  // const [orders, setOrders] = useState<OrderItem[]>(INITIAL_ORDERS);
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
 
-  // const [events, setEvents] = useState<CalendarEventItem[]>(INITIAL_EVENTS);
-
   const [events, setEvents] = useState<CalendarEventItem[]>([]);
 
-  // const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
+  const [cart, setCart] = useState<CartItem[]>(() => readCartFromStorage());
 
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('pseudoteam_cart');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   const [dashboardLoading, setDashboardLoading] = useState(false);
-
   const [dashboardError, setDashboardError] = useState<string | null>(null);
-
   const [dashboardData, setDashboardData] = useState<any>(null);
-
   const [recentProjects, setRecentProjects] = useState<ProjectItem[]>([]);
-
   const [projectProgressData, setProjectProgressData] = useState<any[]>([]);
-
   const [overallProgress, setOverallProgress] = useState(0);
-
-  // const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [ticketsError, setTicketsError] = useState<string | null>(null);
 
   // Modals Visibility
-
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-
   const [isReportOpen, setIsReportOpen] = useState(false);
-
   const [isTicketsOpen, setIsTicketsOpen] = useState(false);
-
   const [isSparesOpen, setIsSparesOpen] = useState(false);
-
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
-
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-
   const [isCartOpen, setIsCartOpen] = useState(false);
-
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-
   const [isReferralOpen, setIsReferralOpen] = useState(false);
-
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
-
   const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
 
   const [selectedLocation, setSelectedLocation] = useState<ProjectLocation | null>(null);
-
   const [selectedMilestone, setSelectedMilestone] = useState<LocationMilestone | null>(null);
 
   const [trackingLoading, setTrackingLoading] = useState(false);
@@ -354,20 +344,27 @@ export const App: React.FC = () => {
   const [trackingSelectedProject, setTrackingSelectedProject] =
     useState<ProjectItem | null>(null);
 
-  // Feedback Toast
+  // Refs to prevent infinite loops while allowing retries when projects aren't loaded yet
+  const trackingFetchedRef = useRef(false);
+  const trackingProjectsRef = useRef<ProjectItem[]>([]);
+  const trackingSelectedProjectRef = useRef<ProjectItem | null>(null);
 
+  useEffect(() => {
+    trackingProjectsRef.current = trackingProjects;
+  }, [trackingProjects]);
+
+  useEffect(() => {
+    trackingSelectedProjectRef.current = trackingSelectedProject;
+  }, [trackingSelectedProject]);
+
+  // Feedback Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
-
     setToastMessage(msg);
-
     setTimeout(() => {
-
       setToastMessage((prev) => (prev === msg ? null : prev));
-
     }, 2800);
-
   }, []);
 
   // Automatic session timeout logout handler
@@ -380,7 +377,10 @@ export const App: React.FC = () => {
 
       localStorage.removeItem('auth_token');
       localStorage.removeItem('pseudoteam_authenticated');
-      localStorage.removeItem('pseudoteam_cart');
+
+      trackingFetchedRef.current = false;
+      setTrackingProjects([]);
+      setTrackingSelectedProject(null);
 
       setDashboardError(null);
       setTrackingError(null);
@@ -388,7 +388,6 @@ export const App: React.FC = () => {
       setSparesError(null);
       setOrdersError(null);
       setDashboardData(null);
-      setCart([]);
 
       setIsUploadOpen(false);
       setIsReportOpen(false);
@@ -413,6 +412,11 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated) {
       isLoggingOutRef.current = false;
+    } else {
+      trackingFetchedRef.current = false;
+      setTrackingProjects([]);
+      setTrackingSelectedProject(null);
+      setTrackingError(null);
     }
   }, [isAuthenticated]);
 
@@ -513,28 +517,6 @@ export const App: React.FC = () => {
   }, [isAuthenticated, handleSessionTimeout]);
 
   // Dedicated route navigation for Location Milestones
-
-  // const navigateToLocationMilestones = useCallback((projectId: string, locationId: string) => {
-
-  //   const targetProject = projects.find(p => p.id === projectId || p.code.toLowerCase() === projectId.toLowerCase()) || selectedProject;
-
-  //   const targetLocation = (targetProject.locations || []).find(l => l.id === locationId || l.city.toLowerCase() === locationId.toLowerCase())
-
-  //     || (targetProject.locations && targetProject.locations[0])
-
-  //     || selectedLocation;
-
-  //   if (targetProject) setSelectedProject(targetProject);
-
-  //   if (targetLocation) setSelectedLocation(targetLocation);
-
-  //   const locId = targetLocation?.id || locationId;
-
-  //   navigate(`/projects/${targetProject.id}/locations/${locId}/milestones`);
-
-  // }, [projects, selectedProject, selectedLocation, navigate]);
-
-
   const navigateToLocationMilestones = useCallback(
     (projectId: string, locationId: string) => {
       const targetProject =
@@ -574,6 +556,100 @@ export const App: React.FC = () => {
     ]
   );
 
+  // Navigate directly to overdue task, milestone, or location
+  const handleNavigateToOverdueTarget = useCallback(
+    async (target: OverdueNavigationTarget) => {
+      const candidateProject =
+        (trackingSelectedProject?.id === target.projectId
+          ? trackingSelectedProject
+          : null) ||
+        trackingProjects.find((p) => String(p.id) === String(target.projectId)) ||
+        projects.find((p) => String(p.id) === String(target.projectId)) ||
+        selectedProject;
+
+      let resolvedProject = candidateProject;
+
+      if (
+        resolvedProject &&
+        resolvedProject.id &&
+        (!Array.isArray(resolvedProject.locations) ||
+          resolvedProject.locations.length === 0 ||
+          (target.milestoneId &&
+            !resolvedProject.locations.some((loc) =>
+              (loc.milestones || []).some(
+                (m) => String(m.id) === String(target.milestoneId)
+              )
+            )))
+      ) {
+        try {
+          const detail = await getProject(resolvedProject.id);
+          if (detail?.success) {
+            resolvedProject = mapProjectTrackingDetail(detail);
+            setTrackingSelectedProject(resolvedProject);
+            setTrackingProjects((prev) =>
+              prev.map((p) =>
+                String(p.id) === String(resolvedProject!.id) ? resolvedProject! : p
+              )
+            );
+            setProjects((prev) =>
+              prev.map((p) =>
+                String(p.id) === String(resolvedProject!.id) ? resolvedProject! : p
+              )
+            );
+          }
+        } catch {
+          // Fall back to existing project data in state
+        }
+      }
+
+      if (!resolvedProject || !resolvedProject.id) return;
+      setSelectedProject(resolvedProject);
+
+      const locationsList = resolvedProject.locations || [];
+      const targetLoc =
+        locationsList.find((l) => String(l.id) === String(target.locationId)) ||
+        locationsList[0];
+
+      if (!targetLoc) {
+        navigate(`/projects/${resolvedProject.id}`);
+        return;
+      }
+      setSelectedLocation(targetLoc);
+
+      const milestonesList = targetLoc.milestones || [];
+      const targetMilestone =
+        milestonesList.find((m) => String(m.id) === String(target.milestoneId)) ||
+        milestonesList[0];
+
+      // Only 'task' jumps into /tasks; 'milestone' and 'location' open Location Milestones
+      if (target.level === 'task' && targetMilestone) {
+        setSelectedMilestone(targetMilestone);
+        const query = target.taskId
+          ? `?taskId=${encodeURIComponent(target.taskId)}`
+          : '';
+        navigate(
+          `/projects/${resolvedProject.id}/locations/${targetLoc.id}/milestones/${targetMilestone.id}/tasks${query}`
+        );
+        return;
+      }
+
+      if (targetMilestone) {
+        setSelectedMilestone(targetMilestone);
+      }
+
+      navigate(
+        `/projects/${resolvedProject.id}/locations/${targetLoc.id}/milestones`
+      );
+    },
+    [
+      trackingSelectedProject,
+      trackingProjects,
+      projects,
+      selectedProject,
+      navigate,
+    ]
+  );
+
   const handleAddTodo = async (newEvent: CalendarEventItem) => {
     try {
       const savedTodo = await createTodo({
@@ -610,27 +686,16 @@ export const App: React.FC = () => {
     }
   };
 
-
   // Dedicated route navigation for Milestone Tasks Timeline
-
   const navigateToMilestoneTasks = useCallback((
-
     project: ProjectItem,
-
     location: ProjectLocation,
-
     milestone: LocationMilestone
-
   ) => {
-
     setSelectedProject(project);
-
     setSelectedLocation(location);
-
     setSelectedMilestone(milestone);
-
     navigate(`/projects/${project.id}/locations/${location.id}/milestones/${milestone.id}/tasks`);
-
   }, [navigate]);
 
   const mapApiTicket = (ticket: TicketApiItem): SupportTicketItem => {
@@ -682,10 +747,7 @@ export const App: React.FC = () => {
 
         const mappedTickets = response.tickets.map(mapApiTicket);
 
-        console.log("Mapped API Tickets:", mappedTickets);
-
         setTickets(mappedTickets);
-
       } catch (error) {
         if (cancelled) return;
 
@@ -702,7 +764,6 @@ export const App: React.FC = () => {
         console.error("Tickets API Error:", error);
 
         setTicketsError(msg);
-
       } finally {
         if (!cancelled) {
           setTicketsLoading(false);
@@ -715,9 +776,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-
   }, [isAuthenticated, handleSessionTimeout]);
-
 
   useEffect(() => {
     const path = location.pathname;
@@ -753,7 +812,6 @@ export const App: React.FC = () => {
     if (tasksMatch) {
       const [, pId, lId, mId] = tasksMatch;
 
-      // Prefer project data loaded from the FastAPI tracking API.
       const targetProj =
         (trackingSelectedProject?.id === pId
           ? trackingSelectedProject
@@ -767,53 +825,36 @@ export const App: React.FC = () => {
         (selectedProject?.id === pId ? selectedProject : null);
 
       if (!targetProj) {
-        console.error('Project not found:', pId);
         return;
       }
 
       setSelectedProject(targetProj);
 
-      // Find the exact location from the selected project.
       const targetLoc = (targetProj.locations || []).find(
         l => l.id === lId
       );
 
       if (!targetLoc) {
-        console.error('Location not found:', lId);
         return;
       }
 
       setSelectedLocation(targetLoc);
 
-      // Use milestones received from FastAPI.
-      // changes done by vb: no mock fallback any more — missing milestones means an empty list
       const milestones = Array.isArray(targetLoc.milestones)
         ? targetLoc.milestones
         : [];
 
-      // Find the exact milestone. Do not automatically select the first one.
       const targetMilestone = milestones.find(
         m => m.id === mId
       );
 
       if (!targetMilestone) {
-        console.error('Milestone not found:', {
-          projectId: pId,
-          locationId: lId,
-          milestoneId: mId,
-          availableMilestones: milestones.map(m => ({
-            id: m.id,
-            name: m.name
-          }))
-        });
         return;
       }
 
       setSelectedMilestone(targetMilestone);
-
       setCurrentView('milestone-tasks');
       setActiveNav('projects');
-
       return;
     }
 
@@ -852,13 +893,10 @@ export const App: React.FC = () => {
           setActiveNav('projects');
           return;
         }
-
-        console.error('Location not found for project:', pId, lId);
       }
     }
 
     // 3. /projects/:projectId/milestones or /milestones
-    // Supports ?location=locId
     const milestonesMatch =
       path.match(/^\/projects\/([^/]+)\/milestones\/?$/) ||
       (path === '/milestones'
@@ -900,7 +938,6 @@ export const App: React.FC = () => {
 
         setCurrentView('location-milestones');
         setActiveNav('projects');
-
         return;
       }
     }
@@ -1040,19 +1077,14 @@ export const App: React.FC = () => {
     navigate
   ]);
 
-
   useEffect(() => {
-
     if (!isAuthenticated) return;
 
     let cancelled = false;
 
     const loadDashboard = async () => {
-
       try {
-
         setDashboardLoading(true);
-
         setDashboardError(null);
 
         const response = await getCustomerDashboard();
@@ -1069,7 +1101,6 @@ export const App: React.FC = () => {
           throw new Error("Dashboard data is missing from the API response.");
         }
 
-        // Normalize optional API arrays before mapping them.
         const projectProgress = Array.isArray(dashboard.projectProgress)
           ? dashboard.projectProgress
           : [];
@@ -1079,44 +1110,27 @@ export const App: React.FC = () => {
         const dashboardRecentProjects = Array.isArray(dashboard.recentProjects)
           ? dashboard.recentProjects
           : [];
-        // const dashboardNotifications = Array.isArray(dashboard.notifications)
-        //   ? dashboard.notifications
-        //   : [];
-        const dashboardCalendarEvents = Array.isArray(dashboard.calendarEvents)
-          ? dashboard.calendarEvents
-          : [];
 
-        // Map all projects.
         const mappedProjects = dashboardProjects.map((project: any) =>
           mapDashboardProject(project, projectProgress)
         );
 
-        // Map recent projects.
         const mappedRecentProjects = dashboardRecentProjects.map((project: any) =>
           mapDashboardProject(project, projectProgress)
         );
 
         setDashboardData(response);
-
         setProjects(mappedProjects);
-
         setRecentProjects(mappedRecentProjects);
 
         if (mappedProjects.length > 0) {
-
           setSelectedProject(mappedProjects[0]);
-
         }
 
-        // Project progress
-
         setProjectProgressData(projectProgress);
-
         setOverallProgress(dashboard.overallProgress || 0);
 
-        // changes done by vb: the dashboard API only *estimates* progress from project status
-        // (Not Started = 0%, In Progress = 50%, Completed = 100%). Overlay the real milestone/task
-        // progress from GET /customer/projects/tracking. If that call fails, keep the dashboard values.
+        // Overlay real milestone/task progress from GET /customer/projects/tracking while keeping plistStatus
         getProjects()
           .then(async (tracking) => {
             if (cancelled) return;
@@ -1127,6 +1141,9 @@ export const App: React.FC = () => {
             if (byId.size === 0) return;
 
             const mappedTrackingSummaries = summaryList.map(mapTrackingProjectSummary);
+            setTrackingProjects(mappedTrackingSummaries);
+            trackingFetchedRef.current = true;
+
             const mappedById = new Map(
               mappedTrackingSummaries.map((m) => [String(m.id), m])
             );
@@ -1137,6 +1154,7 @@ export const App: React.FC = () => {
               if (!t) return p;
               return {
                 ...p,
+                plistStatus: p.plistStatus ?? mapped?.plistStatus,
                 progress: Number(t.overall_progress ?? p.progress) || 0,
                 currentPhase: t.current_phase || p.currentPhase,
                 milestonesCount: t.total_milestones ?? p.milestonesCount,
@@ -1157,22 +1175,17 @@ export const App: React.FC = () => {
             const values = Array.from(byId.values()).map((t) => Number(t.overall_progress) || 0);
             setOverallProgress(Math.round(values.reduce((a, b) => a + b, 0) / values.length));
 
-            // Fetch full project tracking details when locations with end dates are needed
-            // for the red overdue-location indicator in the Projects table.
-            const projectsNeedingLocations = mappedTrackingSummaries.filter(
+            const projectsNeedingDetails = mappedTrackingSummaries.filter(
               (m) =>
                 (m.locationsCount ?? 0) > 0 &&
                 (!m.locations ||
                   m.locations.length === 0 ||
-                  m.locations.every(
-                    (loc: any) =>
-                      !loc.expectedCompletion && !loc.endDate && !loc.dueDate
-                  ))
+                  m.locations.some((loc: any) => !Array.isArray(loc.milestones)))
             );
 
-            if (projectsNeedingLocations.length > 0) {
+            if (projectsNeedingDetails.length > 0) {
               const detailResults = await Promise.allSettled(
-                projectsNeedingLocations.map((m) => getProject(m.id))
+                projectsNeedingDetails.map((m) => getProject(m.id))
               );
               if (cancelled) return;
 
@@ -1190,6 +1203,7 @@ export const App: React.FC = () => {
                   if (!detailed) return p;
                   return {
                     ...p,
+                    plistStatus: p.plistStatus ?? detailed.plistStatus,
                     expectedCompletion: detailed.expectedCompletion || p.expectedCompletion,
                     locations: detailed.locations || p.locations,
                   };
@@ -1197,27 +1211,20 @@ export const App: React.FC = () => {
 
                 setProjects((prev) => prev.map(mergeLocationDetails));
                 setRecentProjects((prev) => prev.map(mergeLocationDetails));
+                setTrackingProjects((prev) => prev.map(mergeLocationDetails));
               }
             }
           })
           .catch((err) => {
             console.warn('Real project progress unavailable; using dashboard estimates.', err);
           });
-
       } catch (error) {
-
         if (!cancelled) {
-
           const message =
-
             error instanceof Error
-
               ? error.message
-
               : "Unable to load dashboard.";
 
-          // Handle expired/invalid authentication when the API client preserves
-          // the HTTP status (Axios: error.response.status; fetch wrappers: error.status).
           const errorStatus =
             typeof error === "object" && error !== null
               ? (error as any).response?.status ?? (error as any).status
@@ -1229,31 +1236,20 @@ export const App: React.FC = () => {
           }
 
           setDashboardError(message);
-
           console.error("Dashboard API error:", error);
-
         }
-
       } finally {
-
         if (!cancelled) {
-
           setDashboardLoading(false);
-
         }
-
       }
-
     };
 
     loadDashboard();
 
     return () => {
-
       cancelled = true;
-
     };
-
   }, [isAuthenticated, handleSessionTimeout]);
 
   // Load projects and project details for Project Tracking, Location Milestones, and Milestone Tasks
@@ -1270,12 +1266,12 @@ export const App: React.FC = () => {
 
     const loadTrackingData = async () => {
       try {
-        setTrackingLoading(true);
         setTrackingError(null);
 
-        // 1. Fetch all tracking project summaries if not loaded yet
-        let mappedProjects = trackingProjects;
+        let mappedProjects = trackingProjectsRef.current;
+
         if (mappedProjects.length === 0) {
+          setTrackingLoading(true);
           const response = await getProjects();
 
           if (!response?.success) {
@@ -1286,34 +1282,40 @@ export const App: React.FC = () => {
 
           if (cancelled) return;
 
+          trackingFetchedRef.current = true;
           mappedProjects = (response.projects || []).map(
             mapTrackingProjectSummary
           );
           setTrackingProjects(mappedProjects);
         }
 
+        if (cancelled) return;
+
         if (mappedProjects.length === 0) {
           setTrackingSelectedProject(null);
           return;
         }
 
-        // 2. Select the project from the URL, or the first project
         const projectIdFromUrl = location.pathname.split('/')[2];
 
         const selectedSummary =
-          mappedProjects.find(p => p.id === projectIdFromUrl) ||
-          mappedProjects[0];
+          mappedProjects.find(
+            (p) =>
+              String(p.id) === String(projectIdFromUrl) ||
+              (projectIdFromUrl &&
+                p.code.toLowerCase() === projectIdFromUrl.toLowerCase())
+          ) || mappedProjects[0];
 
-        // Skip re-fetching if we already hold full detail for this project
+        const currentDetailed = trackingSelectedProjectRef.current;
         if (
-          trackingSelectedProject &&
-          trackingSelectedProject.id === selectedSummary.id &&
-          Array.isArray(trackingSelectedProject.locations)
+          currentDetailed &&
+          String(currentDetailed.id) === String(selectedSummary.id) &&
+          Array.isArray(currentDetailed.locations)
         ) {
           return;
         }
 
-        // 3. Fetch complete tracking details for the selected project
+        setTrackingLoading(true);
         const detailResponse = await getProject(selectedSummary.id);
 
         if (cancelled) return;
@@ -1327,8 +1329,9 @@ export const App: React.FC = () => {
         const detailedProject = mapProjectTrackingDetail(detailResponse);
 
         setTrackingSelectedProject(detailedProject);
-        setSelectedProject(detailedProject);
-
+        setSelectedProject((prev) =>
+          prev?.id === detailedProject.id ? prev : detailedProject
+        );
       } catch (error) {
         if (cancelled) return;
 
@@ -1346,9 +1349,7 @@ export const App: React.FC = () => {
         }
 
         console.error('Project Tracking API error:', error);
-
         setTrackingError(msg);
-
       } finally {
         if (!cancelled) {
           setTrackingLoading(false);
@@ -1361,36 +1362,21 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, currentView, location.pathname, trackingProjects, trackingSelectedProject, handleSessionTimeout]);
-
-  // Sync upload modal trigger with Upload Project Page view
+  }, [isAuthenticated, currentView, location.pathname, projects.length, handleSessionTimeout]);
 
   useEffect(() => {
-
     if (isUploadOpen) {
-
       setCurrentView('upload');
-
       setIsUploadOpen(false);
-
     }
-
   }, [isUploadOpen]);
 
-  // Sync orders modal trigger with Orders Page view
-
   useEffect(() => {
-
     if (isOrdersOpen) {
-
       setCurrentView('orders');
-
       setActiveNav('orders');
-
       setIsOrdersOpen(false);
-
     }
-
   }, [isOrdersOpen]);
 
   useEffect(() => {
@@ -1413,7 +1399,6 @@ export const App: React.FC = () => {
 
         if (cancelled) return;
 
-        // console.log("Critical Spares API Response:", response);
         setSpares(
           response.spares.map((item) => ({
             id: String(item.id),
@@ -1437,7 +1422,6 @@ export const App: React.FC = () => {
             state: item.state ?? undefined,
           }))
         );
-
       } catch (error) {
         if (cancelled) return;
 
@@ -1465,7 +1449,6 @@ export const App: React.FC = () => {
       cancelled = true;
     };
   }, [isAuthenticated, handleSessionTimeout]);
-
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -1559,7 +1542,6 @@ export const App: React.FC = () => {
     };
   }, [isAuthenticated, handleSessionTimeout, showToast]);
 
-
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -1576,6 +1558,15 @@ export const App: React.FC = () => {
 
         setCurrentUserName(profile.fullName || '');
         setCurrentUserEmail(profile.email || '');
+        if (profile.email) {
+          localStorage.setItem('customer_email', profile.email);
+        }
+        if (profile.fullName) {
+          localStorage.setItem('customer_name', profile.fullName);
+        }
+
+        // Restore any cart saved under the resolved account identity
+        setCart(readCartFromStorage(profile.email || profile.fullName));
 
         if (profile.hasAvatar) {
           const imageUrl = await getAccountAvatar();
@@ -1612,12 +1603,9 @@ export const App: React.FC = () => {
   }, [isAuthenticated, handleSessionTimeout]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('pseudoteam_cart', JSON.stringify(cart));
-    } catch {
-      // ignore storage quota errors
-    }
-  }, [cart]);
+    if (!isAuthenticated) return;
+    writeCartToStorage(cart, currentUserEmail || currentUserName);
+  }, [cart, isAuthenticated, currentUserEmail, currentUserName]);
 
   useEffect(() => {
     if (sparesLoading || !spares.length) return;
@@ -1679,96 +1667,64 @@ export const App: React.FC = () => {
   }, [isAuthenticated, handleSessionTimeout]);
 
   // Active KPI Filter State
-
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilterType>(null);
 
   const handleKpiToggle = (filterKey: 'not_started' | 'in_progress' | 'delivered' | 'at_risk') => {
-
     setActiveKpiFilter(prev => prev === filterKey ? null : filterKey);
-
   };
 
   const activeKpiFilterLabel = useMemo(() => {
-
     switch (activeKpiFilter) {
-
       case 'not_started':
-
         return 'Not Started';
-
       case 'in_progress':
-
         return 'In Progress';
-
       case 'delivered':
-
         return 'Delivered';
-
       case 'at_risk':
-
-        return 'At Risk / On Hold';
-
+        return 'On Hold';
       default:
-
         return null;
-
     }
-
   }, [activeKpiFilter]);
 
   const kpiStats = useMemo(() => {
-
     const kpis = dashboardData?.dashboard?.projectKpis;
 
     if (!kpis) {
-
       return {
-
         totalProjects: 0,
-
         notStarted: 0,
-
         inProgress: 0,
-
         completed: 0,
-
         critical: 0,
-
       };
-
     }
 
     return {
-
       totalProjects: Number(kpis.totalProjects ?? 0),
-
       notStarted: Number(kpis.notStarted ?? 0),
-
       inProgress: Number(kpis.inProgress ?? 0),
-
       completed: Number(kpis.completed ?? 0),
-
       critical: Number(kpis.critical ?? 0),
-
     };
-
   }, [dashboardData]);
 
   const displayedRecentProjects = useMemo(() => {
     let result = projects;
 
     if (activeKpiFilter === 'not_started') {
-      result = result.filter(p => p.status === 'Not Started');
+      result = result.filter(p =>
+        ['Not Started', 'No SP Assigned'].includes(p.status)
+      );
     } else if (activeKpiFilter === 'in_progress') {
       result = result.filter(p => p.status === 'In Progress');
     } else if (activeKpiFilter === 'delivered') {
-      result = result.filter(
-        p => p.status === 'Completed' || p.status === 'Delivered'
+      result = result.filter(p =>
+        ['Delivered', 'Completed'].includes(p.status)
       );
     } else if (activeKpiFilter === 'at_risk') {
-      result = result.filter(
-        p => ['Critical', 'At Risk', 'On Hold'].includes(p.status)
-      );
+      result = result.filter(p => p.status === 'On Hold');
     }
 
     if (!searchQuery.trim()) return result;
@@ -1779,34 +1735,27 @@ export const App: React.FC = () => {
       p.name.toLowerCase().includes(q) ||
       p.customer.toLowerCase().includes(q) ||
       p.code.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q)
+      p.category.toLowerCase().includes(q) ||
+      (p.plistStatus || '').toLowerCase().includes(q)
     );
   }, [projects, activeKpiFilter, searchQuery]);
 
   // Handle Project Selection for Tracking
-
   const handleSelectProject = (project: ProjectItem) => {
-
     setSelectedProject(project);
-
     navigate(`/projects/${project.id}`);
-
   };
 
   // Add new project
-
   const handleAddProject = (newProject: ProjectItem) => {
-
+    trackingFetchedRef.current = false;
+    setTrackingProjects([]);
+    setTrackingSelectedProject(null);
     setProjects(prev => [newProject, ...prev]);
-
     setSelectedProject(newProject);
-
     setIsUploadOpen(false);
-
     showToast(`Project "${newProject.name}" has been uploaded and created successfully.`);
-
     navigate(`/projects/${newProject.id}`);
-
   };
 
   const handleUploadProject = async (formData: FormData) => {
@@ -1818,6 +1767,10 @@ export const App: React.FC = () => {
       );
     }
 
+    trackingFetchedRef.current = false;
+    setTrackingProjects([]);
+    setTrackingSelectedProject(null);
+
     showToast(
       response.message || "Project uploaded successfully."
     );
@@ -1825,7 +1778,7 @@ export const App: React.FC = () => {
     navigate(`/projects/${response.project.id}`);
   };
 
-  // Add spare item to cart (capped at available stock) and open cart drawer
+  // Add spare item to cart (capped at available stock) without auto-redirecting to cart
   const handleAddToCart = (spare: CriticalSpareItem, quantity: number = 1) => {
     const availableStock = Math.max(0, Number(spare.stock ?? spare.qty ?? 0));
 
@@ -1843,8 +1796,6 @@ export const App: React.FC = () => {
       showToast(
         `Maximum available stock (${availableStock}) for "${spare.name}" is already in your cart.`
       );
-      setIsSparesOpen(false);
-      setIsCartOpen(true);
       return;
     }
 
@@ -1877,15 +1828,11 @@ export const App: React.FC = () => {
 
     if (qtyToAdd < requestedQty) {
       showToast(
-        `Added ${qtyToAdd} × ${spare.name} (capped at available stock of ${availableStock}).`
+        `Added ${qtyToAdd} × ${spare.name} to cart (capped at available stock of ${availableStock}).`
       );
     } else {
       showToast(`Added ${qtyToAdd} × ${spare.name} to Requisition Cart.`);
     }
-
-    // Close spares modal if open and display the cart drawer
-    setIsSparesOpen(false);
-    setIsCartOpen(true);
   };
 
   // Update Cart Quantity (capped at available stock)
@@ -1914,18 +1861,12 @@ export const App: React.FC = () => {
   };
 
   // Remove Item from Cart
-
   const handleRemoveFromCart = (id: string) => {
-
     setCart(prev => prev.filter(item => item.id !== id));
-
   };
 
   // Cart Checkout
-
-  // changes done by vb
   const handleCartCheckout = async (addressId: number) => {
-
     const lines = cart
       .map(item => ({ hardwareId: Number(item.spareId ?? item.id), quantity: item.quantity }))
       .filter(line => Number.isFinite(line.hardwareId) && line.quantity > 0);
@@ -1934,123 +1875,75 @@ export const App: React.FC = () => {
 
     setOrders(refreshedOrders);
     setCart([]);
+    writeCartToStorage([], currentUserEmail || currentUserName);
 
     showToast(`Requisition submitted — ${placed} ${placed === 1 ? 'order' : 'orders'} placed.`);
-
   };
 
   // Add Ticket
-
   const handleAddTicket = (newTicket: SupportTicketItem) => {
-
     setTickets(prev => [newTicket, ...prev]);
-
     showToast(`Ticket ${newTicket.ticketNumber} dispatched to engineering QA.`);
-
   };
 
   // Add Location to Project
-
   const handleAddLocationToProject = (projectId: string, newLocation: ProjectLocation) => {
-
     setProjects(prev => prev.map(p => {
-
       if (p.id === projectId) {
-
         const updatedLocs = [...(p.locations || []), newLocation];
-
         const updatedCountries = new Set(updatedLocs.map(l => l.country)).size;
 
         return {
-
           ...p,
-
           locations: updatedLocs,
-
           locationsCount: updatedLocs.length,
-
           countriesCount: updatedCountries
-
         };
-
       }
 
       return p;
-
     }));
 
     if (selectedProject.id === projectId) {
-
       setSelectedProject(prev => {
-
         const updatedLocs = [...(prev.locations || []), newLocation];
 
         return {
-
           ...prev,
-
           locations: updatedLocs,
-
           locationsCount: updatedLocs.length,
-
           countriesCount: new Set(updatedLocs.map(l => l.country)).size
-
         };
-
       });
-
     }
 
     showToast(`Added location ${newLocation.city}, ${newLocation.country} to project.`);
-
   };
 
   // Handle Nav Header clicks
-
   const handleNavClick = (tabId: string) => {
-
     setActiveNav(tabId);
 
     if (tabId === 'dashboard') {
-
       navigate('/dashboard');
-
     } else if (tabId === 'projects') {
-
       navigate(`/projects/${selectedProject?.id || 'prj-1'}`);
-
     } else if (tabId === 'reports') {
-
       navigate('/reports');
-
     } else if (tabId === 'spares') {
-
       navigate('/critical-spares');
-
     } else if (tabId === 'tickets') {
-
       navigate('/tickets');
-
     } else if (tabId === 'orders') {
-
       navigate('/orders');
-
     } else if (tabId === 'calendar') {
-
       navigate('/calendar');
-
     } else if (tabId === 'account') {
-
       navigate('/account');
-
     } else if (tabId === 'help') {
-
       navigate('/help');
-
     }
-
   };
-
 
   const handleMarkNotificationAsRead = async (id: string) => {
     const notification = notifications.find((item) => item.id === id);
@@ -2101,17 +1994,13 @@ export const App: React.FC = () => {
     }
   };
 
-
   if (!isAuthenticated) {
-
     return (
-
       <>
-
         <LoginPage
-
           onLoginSuccess={(username, profileData) => {
             isLoggingOutRef.current = false;
+            trackingFetchedRef.current = false;
             setIsAuthenticated(true);
 
             if (username) {
@@ -2123,43 +2012,28 @@ export const App: React.FC = () => {
               setUserProfileData(profileData);
             }
 
+            setCart(readCartFromStorage(username));
             showToast(`Welcome back, ${username || 'Customer'}!`);
-
             navigate('/dashboard');
           }}
-
         />
 
         {toastMessage && (
-
           <div className="fixed top-6 right-6 z-50 bg-slate-900 text-white text-xs font-medium px-4 py-2 rounded-xl shadow-lg border border-slate-700/60 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-
             <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-
             <span>{toastMessage}</span>
-
           </div>
-
         )}
-
       </>
-
     );
-
   }
 
   return (
-
     <div
-
       id="pseudoteam-app-root"
-
       className="w-full h-dvh max-h-dvh overflow-hidden bg-[#F4F6F9] text-slate-800 flex flex-col font-sans select-none animate-in fade-in duration-700 ease-out" /* changes done by vb */
-
     >
-
       {/* 1. Global Header (56px) */}
-
       <Header
         activeNav={activeNav}
         onNavClick={handleNavClick}
@@ -2168,7 +2042,6 @@ export const App: React.FC = () => {
         notifications={notifications}
         notificationCount={unreadNotificationsCount}
         cart={cart}
-        // cartCount={totalCartUnits}
         cartCount={cart.length}
         projects={projects}
         events={events}
@@ -2184,42 +2057,33 @@ export const App: React.FC = () => {
         onOpenProfile={() => navigate('/account')}
         onOpenReferral={() => setIsReferralOpen(true)}
         onLogout={() => {
+          writeCartToStorage(cart, currentUserEmail || currentUserName);
           localStorage.removeItem('auth_token');
           localStorage.removeItem('pseudoteam_authenticated');
-          localStorage.removeItem('pseudoteam_cart');
-          setCart([]);
-
+          trackingFetchedRef.current = false;
+          setTrackingProjects([]);
+          setTrackingSelectedProject(null);
           setIsAuthenticated(false);
           setDashboardData(null);
-
           showToast('Signed out of PseudoTeam workspace.');
           navigate('/login');
         }}
       />
 
       {/* Subtle Toast notification */}
-
       {toastMessage && (
-
         <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs font-medium px-4 py-2 rounded-xl shadow-lg border border-slate-700/60 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-
           <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-
           <span>{toastMessage}</span>
-
         </div>
-
       )}
 
       {/* 2. Main Content Area */}
-
       {currentView === 'upload' ? (
-
         <UploadProjectView
           onCancel={() => navigate('/dashboard')}
           onAddProject={handleUploadProject}
         />
-
       ) : currentView === 'tracking' ? (
         trackingLoading ? (
           <div className="flex-1 flex items-center justify-center text-sm text-slate-500">
@@ -2232,10 +2096,6 @@ export const App: React.FC = () => {
           >
             {trackingError}
           </div>
-        ) : !trackingSelectedProject ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-slate-500">
-            No projects available for tracking.
-          </div>
         ) : (
           <ProjectTrackingView
             project={trackingSelectedProject}
@@ -2247,132 +2107,77 @@ export const App: React.FC = () => {
             onRequestSpare={() => setIsSparesOpen(true)}
             onAddLocation={() => setIsAddLocationOpen(true)}
             onViewLocationDetails={(loc) => {
-              navigateToLocationMilestones(trackingSelectedProject.id, loc.id);
+              if (trackingSelectedProject) {
+                navigateToLocationMilestones(trackingSelectedProject.id, loc.id);
+              }
             }}
             onUploadDocs={() => navigate('/upload-project')}
+            onNavigateToOverdueTarget={handleNavigateToOverdueTarget}
           />
         )
       ) : currentView === 'location-milestones' && selectedLocation ? (
-
         <LocationMilestonesView
-
           project={selectedProject}
-
           initialLocation={selectedLocation}
-
           currentUser={currentUserName || 'Customer'}
-
           onSelectLocation={(loc) => {
-
             setSelectedLocation(loc);
-
             navigate(`/projects/${selectedProject.id}/locations/${loc.id}/milestones`);
-
           }}
-
           onViewMilestoneTasks={(milestone) => {
-
             navigateToMilestoneTasks(selectedProject, selectedLocation, milestone);
-
           }}
-
           onBackToTracking={() => navigate(`/projects/${selectedProject.id}`)}
-
           onBackToDashboard={() => navigate('/dashboard')}
-
           onUpdateProjectLocation={(projectId, updatedLoc) => {
-
             setProjects(prev => prev.map(p => {
-
               if (p.id === projectId) {
-
                 const updatedLocs = (p.locations || []).map(l => l.id === updatedLoc.id ? updatedLoc : l);
-
                 return {
-
                   ...p,
-
                   locations: updatedLocs
-
                 };
-
               }
-
               return p;
-
             }));
 
             setSelectedProject(prev => {
-
               if (prev.id === projectId) {
-
                 const updatedLocs = (prev.locations || []).map(l => l.id === updatedLoc.id ? updatedLoc : l);
-
                 return {
-
                   ...prev,
-
                   locations: updatedLocs
-
                 };
-
               }
-
               return prev;
-
             });
 
             setSelectedLocation(updatedLoc);
-
           }}
-
         />
-
       ) : currentView === 'milestone-tasks' && selectedLocation && selectedMilestone ? (
-
         <MilestoneTasksView
-
           project={selectedProject}
-
           location={selectedLocation}
-
           initialMilestone={selectedMilestone}
           currentUser={currentUserName || 'Customer'}
-
           onBackToMilestones={() => {
-
             navigate(`/projects/${selectedProject.id}/locations/${selectedLocation.id}/milestones`);
-
           }}
-
           onBackToTracking={() => navigate(`/projects/${selectedProject.id}`)}
-
           onBackToDashboard={() => navigate('/dashboard')}
-
           onSelectMilestone={(m) => {
-
             setSelectedMilestone(m);
-
           }}
-
         />
-
       ) : currentView === 'spares' ? (
-
         <CriticalSparesView
-
           spares={spares}
-
           cart={cart}
-
           onBackToDashboard={() => navigate('/dashboard')}
-
           onAddToCart={handleAddToCart}
-
         />
-
       ) : currentView === 'tickets' ? (
-
         <TicketsView
           tickets={tickets}
           projects={projects}
@@ -2385,81 +2190,40 @@ export const App: React.FC = () => {
           onAddTicket={handleAddTicket}
           isOpenModalInitial={openTicketModalInitially}
         />
-
       ) : currentView === 'ticket-details' && selectedTicket ? (
-
         <TicketDetailsView
-
           ticket={selectedTicket}
-
           onBackToTickets={() => navigate('/tickets')}
-
           onBackToDashboard={() => navigate('/dashboard')}
-
           onUpdateTicketStatus={(ticketId, newStatus) => {
-
             setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
-
             setSelectedTicket(prev => prev && prev.id === ticketId ? { ...prev, status: newStatus } : prev);
-
           }}
-
         />
-
       ) : currentView === 'orders' ? (
-
         <OrdersView
-
           orders={orders}
           loading={ordersLoading}
           error={ordersError && !isAuthErrorMessage(ordersError) ? ordersError : null}
-
           onBackToDashboard={() => navigate('/dashboard')}
-
         />
-
       ) : currentView === 'account' ? (
-
         <AccountProfileView
-
           initialProfileData={userProfileData}
-
           onBackToDashboard={() => navigate('/dashboard')}
-
           onShowToast={showToast}
-
         />
-
       ) : currentView === 'help' ? (
-
         <HelpView
-
           onAddTicket={handleAddTicket}
-
           onShowToast={showToast}
-
           onBackToDashboard={() => navigate('/dashboard')}
-
         />
-
       ) : (
-
-        /* MAIN DASHBOARD: 
-
-           Begins directly with KPI section below header (NO welcome hero banner, NO large Refer & Earn banner).
-
-           Fits inside 1440 × 900 without page scroll.
-
-        */
-
         <main
-
           id="main-dashboard-viewport"
-
           className="flex-1 p-2.5 sm:p-3 lg:px-4 lg:py-2.5 flex flex-col gap-2.5 max-w-[1680px] w-full mx-auto overflow-y-auto xl:overflow-hidden min-h-0 xl:h-[calc(100dvh-56px)] select-text" /* changes done by vb */
-
         >
-
           {dashboardLoading && (
             <div
               className="shrink-0 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700"
@@ -2480,54 +2244,29 @@ export const App: React.FC = () => {
           )}
 
           {/* KPI Section: 5 items immediately below header */}
-
           <div className="shrink-0">
-
             <KpiSection
-
               stats={kpiStats}
-
               activeFilter={activeKpiFilter}
-
               onKpiClick={handleKpiToggle}
-
               onUploadClick={() => setCurrentView('upload')}
-
               onOpenUpload={() => setCurrentView('upload')}
-
             />
-
           </div>
 
           {/* Grid Row 1: Projects + Project Progress Overview + Calendar */}
-
-          {/* changes done by vb
-              Only stretch/shrink to fill the viewport at xl, where the dashboard is a fixed-height layout.
-              Below xl the page scrolls, so this row must keep its natural height or it overlaps Row 2. */}
           <div className="shrink-0 xl:shrink xl:flex-1 xl:min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-2.5">
-
             {/* Projects Table */}
-
             <div className="col-span-1 md:col-span-2 xl:col-span-5 h-auto md:h-[340px] xl:h-full min-h-[260px] xl:min-h-0">
-
               <RecentProjectsTable
-
                 title="Projects"
-
                 projects={displayedRecentProjects}
-
                 activeFilterLabel={activeKpiFilterLabel}
-
                 onClearFilter={() => setActiveKpiFilter(null)}
-
                 onSelectProject={(projectId) => navigate(`/projects/${projectId}`)}
-
                 onViewAll={() => navigate(`/projects/${projects[0]?.id || 'prj-1'}`)}
-
                 onUploadProject={() => navigate('/upload-project')}
-
               />
-
             </div>
 
             {/* Project Progress Overview */}
@@ -2539,209 +2278,119 @@ export const App: React.FC = () => {
             </div>
 
             {/* Calendar */}
-
             <div className="col-span-1 md:col-span-1 xl:col-span-3 h-auto md:h-[340px] xl:h-full min-h-[280px] xl:min-h-0">
-
               <CalendarCard
-
                 events={events}
-
                 onViewAll={() => navigate('/calendar')}
-
                 onOpenFullCalendar={() => navigate('/calendar')}
-
                 onAddEvent={handleAddTodo}
-
               />
-
             </div>
-
           </div>
 
           {/* Grid Row 2: 4 cards (Critical Spares, Support Tickets, Recent Orders, Quick Actions) */}
-
           <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 h-auto xl:h-[202px]">
-
             {/* 1. Critical Spares */}
-
             <div className="h-auto xl:h-full min-h-[175px] xl:min-h-0">
-
               <CriticalSparesCard
-
-                spares={spares} // changes done by vb: real data instead of hard-coded numbers
-
+                spares={spares}
                 onViewAll={() => navigate('/critical-spares')}
-
                 onRequestSpare={() => setIsSparesOpen(true)}
-
               />
-
             </div>
 
             {/* 2. Support Tickets */}
-
             <div className="h-auto xl:h-full min-h-[175px] xl:min-h-0">
-
               <SupportTicketsCard
-
-                tickets={tickets} // changes done by vb: real data instead of hard-coded numbers
-
+                tickets={tickets}
                 onViewAll={() => navigate('/tickets')}
-
                 onCreateTicket={() => navigate('/tickets?openTicket=true')}
-
               />
-
             </div>
 
             {/* 3. Recent Orders */}
-
             <div className="h-auto xl:h-full min-h-[175px] xl:min-h-0">
-
               <RecentOrdersCard
-
                 orders={orders}
-
                 onViewAll={() => navigate('/orders')}
-
               />
-
             </div>
 
             {/* 4. Quick Actions */}
-
             <div className="h-auto xl:h-full min-h-[175px] xl:min-h-0">
-
               <QuickActionsCard
-
                 onUploadProject={() => navigate('/upload-project')}
-
                 onGenerateReport={() => navigate('/reports')}
-
                 onTrackProject={() => navigate(`/projects/${projects[0]?.id || 'prj-1'}`)}
-
                 onViewTickets={() => navigate('/tickets')}
-
                 onViewOrders={() => navigate('/orders')}
-
                 onRequestSpare={() => setIsSparesOpen(true)}
-
                 onCreateInquiry={() => navigate('/help')}
-
                 onOpenCart={() => setIsCartOpen(true)}
-
               />
-
             </div>
-
           </div>
-
         </main>
-
       )}
 
       {/* Interactive Modals & Drawers */}
-
       <UploadProjectModal
-
         isOpen={isUploadOpen}
-
         onClose={() => setIsUploadOpen(false)}
-
         onAddProject={handleAddProject}
-
       />
 
       <GenerateReportModal
-
         isOpen={isReportOpen}
-
         onClose={() => {
-
           setIsReportOpen(false);
-
           if (location.pathname === '/reports') navigate('/dashboard');
-
         }}
-
         projects={projects}
-
         defaultProject={selectedProject}
-
       />
 
       <TicketsModal
-
         isOpen={isTicketsOpen}
-
         onClose={() => setIsTicketsOpen(false)}
-
         tickets={tickets}
-
         onAddTicket={handleAddTicket}
-
         initialProjectName={selectedProject?.name}
-
       />
 
       <CriticalSparesModal
-
         isOpen={isSparesOpen}
-
         onClose={() => setIsSparesOpen(false)}
-
         spares={spares}
-
         cart={cart}
-
         onAddToCart={handleAddToCart}
-
+        onOpenCart={() => setIsCartOpen(true)}
       />
 
       <OrdersModal
-
         isOpen={isOrdersOpen}
-
         onClose={() => setIsOrdersOpen(false)}
-
         orders={orders}
-
       />
 
       <CalendarModal
-
         isOpen={isCalendarOpen}
-
         onClose={() => {
-
           setIsCalendarOpen(false);
-
           if (location.pathname === '/calendar') navigate('/dashboard');
-
         }}
-
         events={events}
-
         onAddEvent={handleAddTodo}
-
       />
 
       <CartDrawer
-
         isOpen={isCartOpen}
-
         onClose={() => setIsCartOpen(false)}
-
         cart={cart}
-
         spares={spares}
-
         onUpdateQuantity={handleUpdateCartQuantity}
-
         onRemoveItem={handleRemoveFromCart}
-
         onCheckout={handleCartCheckout}
-
       />
 
       <NotificationsPanel
@@ -2753,73 +2402,46 @@ export const App: React.FC = () => {
       />
 
       <ReferralModal
-
         isOpen={isReferralOpen}
-
         onClose={() => setIsReferralOpen(false)}
-
       />
 
       <HelpInquiryModal
-
         isOpen={isHelpOpen}
-
         onClose={() => setIsHelpOpen(false)}
-
         onAddTicket={handleAddTicket}
-
         onShowToast={showToast}
-
       />
 
       <UserProfileModal
-
         isOpen={isUserProfileOpen}
-
         onClose={() => setIsUserProfileOpen(false)}
-
         onOpenFullAccount={() => {
-
           setIsUserProfileOpen(false);
-
           navigate('/account');
-
         }}
-
         onLogout={() => {
-
+          writeCartToStorage(cart, currentUserEmail || currentUserName);
           localStorage.removeItem('auth_token');
-
           localStorage.removeItem('pseudoteam_authenticated');
-
+          trackingFetchedRef.current = false;
+          setTrackingProjects([]);
+          setTrackingSelectedProject(null);
           setIsAuthenticated(false);
-
           setDashboardData(null);
-
           showToast('Signed out of PseudoTeam workspace.');
-
           navigate('/login');
-
         }}
-
       />
 
       <AddLocationModal
-
         isOpen={isAddLocationOpen}
-
         onClose={() => setIsAddLocationOpen(false)}
-
         project={selectedProject}
-
         onAddLocation={handleAddLocationToProject}
-
       />
-
     </div>
-
   );
-
 };
 
 const mapDashboardProject = (
@@ -2832,6 +2454,9 @@ const mapDashboardProject = (
 
   const status = project.status || "Unknown";
 
+  const rawPlistStatus =
+    (project.plistStatus ?? project.plist_status ?? "").trim() || undefined;
+
   const rawFinalBudget =
     project.finalPrice ??
     project.final_price ??
@@ -2842,43 +2467,25 @@ const mapDashboardProject = (
 
   return {
     id: String(project.id),
-
     code: String(project.projectId || project.id),
-
     name: project.title || "Untitled Project",
-
     customer: project.customerName || "",
-
     category: project.category || project.type || "General",
-
     status: status as ProjectItem["status"],
-
+    plistStatus: rawPlistStatus,
     progress: progressEntry?.progress ?? 0,
-
     currentPhase: project.statusDescription || status,
-
     velocity: "",
-
     manager: "",
-
     startDate: project.startDate || "",
-
     expectedCompletion: project.endDate || project.expectedCompletion || "",
-
     budget: String(project.budget ?? 0),
-
     finalBudget: rawFinalBudget != null ? String(rawFinalBudget) : undefined,
-
     lastUpdated: project.updatedAt || project.createdAt || "",
-
     milestonesCount: 0,
-
     completedMilestones: 0,
-
     locationsCount: rawLocations.length,
-
     countriesCount: 0,
-
     locations: rawLocations,
   };
 };

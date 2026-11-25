@@ -95,15 +95,39 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
     return dueEnd.getTime() < todayStart.getTime();
   };
 
-  // Red dot indicator: any location in the project has crossed its end date
-  const hasOverdueLocation = (project: ProjectItem): boolean => {
-    const locations = project.locations || [];
-    return locations.some((loc: any) =>
-      isDateOverdue(
-        loc.expectedCompletion || loc.endDate || loc.dueDate || loc.targetDate,
-        loc.status
-      )
-    );
+  // Red dot indicator: any task/milestone/location in the project has crossed its due/end date
+  const hasOverdueItem = (project: ProjectItem): boolean => {
+    const locations = Array.isArray(project.locations) ? project.locations : [];
+    return locations.some((loc: any) => {
+      if (
+        isDateOverdue(
+          loc?.expectedCompletion || loc?.endDate || loc?.dueDate || loc?.targetDate,
+          loc?.status
+        )
+      ) {
+        return true;
+      }
+
+      const milestones = Array.isArray(loc?.milestones) ? loc.milestones : [];
+      return milestones.some((ms: any) => {
+        if (
+          isDateOverdue(
+            ms?.endDate || ms?.dueDate || ms?.targetDate || ms?.expectedCompletion,
+            ms?.status
+          )
+        ) {
+          return true;
+        }
+
+        const tasks = Array.isArray(ms?.tasks) ? ms.tasks : [];
+        return tasks.some((task: any) =>
+          isDateOverdue(
+            task?.dueDate || task?.endDate || task?.targetDate || task?.deadline,
+            task?.status
+          )
+        );
+      });
+    });
   };
 
   // Red outline indicator: the project itself has crossed its end date
@@ -292,7 +316,7 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
             projects.map((project) => {
               const badge = getInitials(project);
               const badgeColor = getBadgeStyle(badge);
-              const locationOverdue = hasOverdueLocation(project);
+              const overdueDot = hasOverdueItem(project);
               const projectOverdue = isProjectOverdue(project);
 
               return (
@@ -308,10 +332,10 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      {locationOverdue && (
+                      {overdueDot && (
                         <span
-                          title="One or more locations have passed their end date"
-                          aria-label="Location end date overdue"
+                          title="One or more tasks, milestones, or locations are overdue"
+                          aria-label="Overdue item indicator"
                           className="w-2 h-2 rounded-full bg-red-500 shrink-0"
                         />
                       )}
@@ -382,7 +406,7 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
               projects.map((project) => {
                 const badge = getInitials(project);
                 const badgeColor = getBadgeStyle(badge);
-                const locationOverdue = hasOverdueLocation(project);
+                const overdueDot = hasOverdueItem(project);
                 const projectOverdue = isProjectOverdue(project);
 
                 return (
@@ -396,13 +420,13 @@ export const RecentProjectsTable: React.FC<RecentProjectsTableProps> = ({
                         : 'hover:bg-slate-50/70'
                     }`}
                   >
-                    {/* Project name + badge + overdue location red dot */}
+                    {/* Project name + badge + overdue red dot */}
                     <td className="py-1.5 pr-2 pl-1.5">
                       <div className="flex items-center gap-2">
-                        {locationOverdue && (
+                        {overdueDot && (
                           <span
-                            title="One or more locations have passed their end date"
-                            aria-label="Location end date overdue"
+                            title="One or more tasks, milestones, or locations are overdue"
+                            aria-label="Overdue item indicator"
                             className="w-2 h-2 rounded-full bg-red-500 shrink-0"
                           />
                         )}
